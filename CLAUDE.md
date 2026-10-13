@@ -97,6 +97,7 @@ identity, as in SIGNAL: one instance per full URL).
 - `roster.js` -- fetches SIGNAL's stamp, imports SIGNAL's stations.js.
 - `player.js` -- the YouTube IFrame player (same vars as SIGNAL's).
 - `mix.js` -- pure: static level and music volume from the signal value.
+- `broadcast.js` -- pure: where in a track you land (join point, resume).
 - `sound.js` -- WebAudio: the line-noise bed, the lock handshake, mute.
 - `tools/dev-server.mjs` -- see below.
 
@@ -188,6 +189,37 @@ sits near -14 -- falling to -40 near a station and -63 just inside
 lock; the handshake peaks at -19 dBFS. **Nobody has listened to it on
 real speakers yet**; that is the check that matters.
 
+### Mid-song joins (2026-10-13)
+
+A station does not start a song because you arrived. `broadcast.js`
+carries SIGNAL's rules and numbers (its program.js, 8/20 and 36th pass):
+
+- **Tuning in** (a lock, power-on, scan, Retry) joins a fresh track at a
+  random point, leaving at least 30s or the last 15% of it; under 20s
+  starts at 0.
+- **Coming back within 3 minutes** (`RESUME_CUTOFF_MS`, asserted equal to
+  SIGNAL's) rejoins the same track, advanced by the time you were away.
+  **Deliberate change from SIGNAL:** when that runs past the end, SIGNAL
+  clamps to the last safe start of the old track; here the broadcast has
+  moved on -- the next track, that far in.
+- **The station moving on** (a natural end, Next Track) starts at 0.
+
+`player.join()` cues, waits for CUED (the first moment the duration is
+known), asks where to start, seeks and plays. The join is keyed to its
+video id, so a late CUED belonging to a station you already tuned past
+cannot start it. Remembering a position needs a track that has actually
+started (position > 0); a track still cueing is not worth resuming.
+
+Verified against a **fake** player (blocked YouTube, a stand-in `YT`
+logging cue/seek/play/load): join on power-on, join on tune, resume at
+left + gap, load-from-0 on track end, and a fast 1-2-3 that never plays
+station 1 and settles on 3. Per this repo's inherited rule, that proves
+the app does what we *believe* the API does; SIGNAL has run the same
+CUED -> seek -> play sequence against the real player since 8/20.
+Known soft spot: a stale CUED that arrives after the next cue but before
+its video is ready may read a duration of 0 and start that track at the
+top -- a missed join, never a wrong station.
+
 ### The dev server mounts two repos
 
 `/signal-95/` is this repo and `/signal/` is SIGNAL's checkout -- the
@@ -251,11 +283,16 @@ and deleting the dot rule were both checked to turn the suite red.
 
 ## Not built yet
 
-The right-click preset menu, volume control, station IDs, lyrics, weather, the secret stations (handed over
-by `roster.js` as `secretStations`, not on the dial -- they must stay
-generic on `station.secret`, as in SIGNAL), mid-song joins, persistence
-beyond band/frequency/mute, a DOM test harness, and deploy (Pages from
-`main`, same as SIGNAL; `npm run stamp` first).
+The right-click preset menu, volume control, station IDs, lyrics,
+weather, the secret stations (handed over by `roster.js` as
+`secretStations`, not on the dial -- they must stay generic on
+`station.secret`, as in SIGNAL), persistence beyond band/frequency/mute,
+schemes for the 13 stations still on the house scheme, and a DOM test
+harness.
+
+Deploy is GitHub Pages from `main` (live since 2026-10-12 at
+hyphen8d.github.io/signal-95): every push to main ships, so
+`npm run stamp` first.
 
 ## Conventions
 

@@ -15,6 +15,7 @@ const { createPlayer } = await import(`./player.js?v=${V}`)
 const { createMenuBar } = await import(`./menus.js?v=${V}`)
 const { CONTROLS } = await import(`./controls.js?v=${V}`)
 const mix = await import(`./mix.js?v=${V}`)
+const broadcast = await import(`./broadcast.js?v=${V}`)
 const { createSound } = await import(`./sound.js?v=${V}`)
 
 const SCAN_DWELL_MS = 6000
@@ -33,6 +34,8 @@ const state = {
   station: null,         // the LOCKED station, or null
   track: null,
   bags: new Map(),       // station id -> remaining shuffled track indices
+  trackStart: 0,         // how state.track starts: 0, 'join', or seconds
+  memory: new Map(),     // station id -> where it was when you left (broadcast.js)
   scanTimer: 0,
   flash: '',
   flashUntil: 0,
@@ -72,10 +75,40 @@ function nextTrack(station) {
   return station.tracks[bag.pop()]
 }
 
-function play(track) {
+/** Start a track. `start` is 0 (from the top: the station moving on),
+ *  'join' (a random point: you tuning in), or seconds (a resume). See
+ *  broadcast.js for which is which. */
+function play(track, start = 0) {
   state.track = track
-  if (player && state.power) player.load(track.youtubeId)
+  state.trackStart = start
+  if (player && state.power) startTrack(track, start)
   announce(`${track.title}, ${track.artist}`, 'track')
+}
+
+function startTrack(track, start) {
+  if (start === 0) player.load(track.youtubeId)
+  else player.join(track.youtubeId, (dur) => (start === 'join' ? broadcast.joinPoint(dur) : broadcast.clampStart(start, dur)))
+}
+
+/** Tuning in to a station: rejoin the broadcast where it would be now if
+ *  you were here recently, otherwise join a fresh track part-way through. */
+function tuneIn(station) {
+  const mem = state.memory.get(station.id)
+  state.memory.delete(station.id)
+  const plan = broadcast.resumePlan(mem, Date.now())
+  if (plan && !plan.next) play(mem.track, plan.at)
+  else if (plan) play(nextTrack(station), plan.at)
+  else play(nextTrack(station), 'join')
+}
+
+/** Leaving a station: note where its broadcast was, for tuneIn(). Only a
+ *  track that had actually started counts -- a position of 0 is a track
+ *  still cueing, and resuming that would be a join with extra steps. */
+function remember(station) {
+  if (!station || !state.track || !player) return
+  const position = player.position()
+  if (!(position > 0)) return
+  state.memory.set(station.id, { track: state.track, position, duration: player.duration(), leftAt: Date.now() })
 }
 
 function stopPlayback() {
@@ -92,10 +125,11 @@ function tune(freq, { fromScan = false } = {}) {
   const { station, dist } = dial.nearest(state.stations, state.band, state.freq)
   const locked = station && dial.isLocked(dist) ? station : null
   if (locked !== state.station) {
+    if (state.power) remember(state.station)
     state.station = locked
     if (locked) {
       announce(`${locked.callsign}, ${locked.freq.toFixed(1)}`, 'station')
-      if (state.power) { sound.handshake(); play(nextTrack(locked)) }
+      if (state.power) { sound.handshake(); tuneIn(locked) }
     } else {
       sound.cancelHandshake()
       stopPlayback()
@@ -145,8 +179,8 @@ function togglePower() {
   state.power = !state.power
   // The power key is a user gesture -- the moment an AudioContext may start.
   if (state.power) sound.start()
-  if (state.power && state.station) { sound.handshake(); play(nextTrack(state.station)) }
-  if (!state.power) { stopScan(); sound.cancelHandshake(); stopPlayback() }
+  if (state.power && state.station) { sound.handshake(); tuneIn(state.station) }
+  if (!state.power) { stopScan(); sound.cancelHandshake(); remember(state.station); stopPlayback() }
   announce(state.power ? 'Power on' : 'Power off', 'power')
   render()
 }
@@ -530,7 +564,9 @@ function wireMouse() {
   $('seekDown').addEventListener('click', () => seek(-1))
   for (const t of document.querySelectorAll('.tab')) t.addEventListener('click', () => setBand(t.dataset.band))
   $('lostNext').addEventListener('click', () => { closeModal(); if (state.station) play(nextTrack(state.station)) })
-  $('lostRetry').addEventListener('click', () => { closeModal(); if (state.track) play(state.track) })
+  // Retry re-tunes rather than restarting the song: the broadcast did not
+  // wait for the signal to come back.
+  $('lostRetry').addEventListener('click', () => { closeModal(); if (state.track) play(state.track, 'join') })
   $('aboutOk').addEventListener('click', () => closeModal())
   $('keysOk').addEventListener('click', () => closeModal())
   $('guideTune').addEventListener('click', guideTune)
@@ -682,5 +718,5 @@ export async function start() {
   player.setVolume(mix.musicVolume(state.power ? dial.signalFor(dial.nearest(state.stations, state.band, state.freq).dist) : 1))
   // Powered on and locked before the API finished loading: play() kept the
   // track but had no player to hand it to.
-  if (state.power && state.track) player.load(state.track.youtubeId)
+  if (state.power && state.track) startTrack(state.track, state.trackStart)
 }
