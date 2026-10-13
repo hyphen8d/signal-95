@@ -101,6 +101,8 @@ identity, as in SIGNAL: one instance per full URL).
 - `lyrics.js` -- pure: SIGNAL's synced-lyrics logic, ported (agreement
   test reads SIGNAL's voice.js source for the constants and URLs).
 - `liners.js` -- pure: which liner, how often, and why the generals are out.
+- `screensaver.js` -- pure: engine per station, the idle rule, SIGNAL's
+  synthetic audio. `saver-engines.js` -- the six canvas engines.
 - `weather.js` -- pure: SIGNAL's weather data half, ported (agreement test
   imports SIGNAL's weather.js and compares tables, buckets and the URL).
 - `sound.js` -- WebAudio: the line-noise bed, the lock handshake, mute.
@@ -254,6 +256,43 @@ file is the only place the keys are written down, as in SIGNAL.
 `N` / Station -> Next Track (SIGNAL's key): the next track from the top.
 Off-station it says "No signal", powered off "Power is off" -- SIGNAL's
 dead-feedback fix for the same key.
+
+### The screensaver (2026-10-13)
+
+SIGNAL's visualizer, as the era had it: `V` or View -> Screensaver, and --
+unlike SIGNAL since 2026-08-30 -- after `IDLE_MS` (SIGNAL's
+VISUALIZER_IDLE_MS, 4m20s, asserted) of no input. **That reversal is
+argued in screensaver.js's header and is load-bearing**: SIGNAL retired
+idle entry because its visualizer held state (covering a weather card,
+dropping lyrics, re-arming effect clocks). This one holds none, and the
+rules that make that true are the ones to keep:
+
+- **Never over a dialog or menu** (`shouldIdleStart`'s `blocked`), only on
+  a set that is on and tuned, and any dialog that opens (Signal Lost)
+  takes it down first (`openModal` -> `stopSaver`).
+- **Waking changes nothing.** Any key, click, wheel, touch or a real
+  mouse move (>8px from where the hand was) ends it; the waking input is
+  swallowed (capture-phase listener, `stopImmediatePropagation`), so the
+  P that wakes it cannot also switch the set off. A 300ms grace keeps the
+  key or click that started it from ending it.
+- **A setting** (View -> Screensaver After Idle), saved; it defaults on,
+  and OFF for `prefers-reduced-motion`, where every engine also runs at a
+  quarter speed and the now-playing box holds still.
+
+Six generic engines -- fire, stars (warp / drift / snow), lines, a horizon
+grid, ripples, equaliser bars -- each station's SIGNAL `visual` mapped to
+the one that keeps its feel (FLAME is fire, OUTRUN the horizon, RIPPLE and
+LAGOON water, FROST falls). `tests/screensaver.test.mjs` fails if SIGNAL's
+roster gains a visual with no mapping here, and checks the ported
+`syntheticAudio` body line for line against SIGNAL's. The engines move to
+that stand-in signal (the music is an iframe and cannot be measured) and
+to SILENT_AUDIO while muted or off. A now-playing box drifts over it; with
+lyrics on, the current line sits large in the lower third.
+
+Two engines were fixed after looking at them: the fire died a third of
+the way up (cooling too fast) and drew 10px blocks (too few cells); the
+slow warp was invisible (dots erased by the trail wash -- warp stars are
+streaks now). Rendered per station as a contact sheet before shipping.
 
 ### Liners (2026-10-13)
 
@@ -508,9 +547,9 @@ and deleting the dot rule were both checked to turn the suite red.
 
 A DOM test harness (everything UI-side is verified by driving headless
 Chromium over CDP; the drives live outside the repo), general liners of
-its own (see Liners), and its visualizer and game -- the last two would need
-their own thinking about what a 90s desktop app's equivalent is
-(a screensaver was the original idea).
+its own (see Liners), and SIGNAL's hidden game (VECTOR SCAN) -- which in
+SIGNAL is reached from inside the visualizer, and so would need its own
+answer here.
 
 Deploy is GitHub Pages from `main` (live since 2026-10-12 at
 hyphen8d.github.io/signal-95): every push to main ships, so

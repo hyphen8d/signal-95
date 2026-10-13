@@ -24,6 +24,7 @@ export const CONTROLS = [
   { mouse: 'Station → Copy Station Link', keys: ['K'], does: 'Copy a link to the station you are on' },
   { mouse: 'View → Lyrics', keys: ['L'], does: 'Show the words on the display, in time' },
   { mouse: 'View → Weather', keys: ['W'], does: 'The local forecast (asks first)' },
+  { mouse: 'View → Screensaver', keys: ['V'], does: 'Screensaver now (any key or mouse movement returns)' },
   { mouse: 'Guide → Station Guide', keys: ['G'], does: 'Browse the stations and their playlists' },
   { mouse: 'Menu bar', keys: ['Alt+letter', 'F10'], does: 'Open a menu (arrows move, Enter chooses, Esc closes)' },
 ]

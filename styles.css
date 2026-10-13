@@ -233,6 +233,23 @@ kbd { display: inline-block; font: inherit; font-variant-ligatures: none; font-s
 .dialog .actions { display: flex; justify-content: flex-end; gap: 8px; padding: 6px 12px 12px; }
 .dialog .actions .btn { min-width: 96px; min-height: 30px; }
 
+/* The screensaver: the whole window, black, no cursor. The canvas is drawn
+   at one device pixel per CSS pixel and scaled up chunky -- the era's
+   savers were never sharper than the screen they ran on. */
+#saverWrap { position: fixed; inset: 0; z-index: 40; background: #000; cursor: none; overflow: hidden; }
+#saverWrap[hidden] { display: none; }
+#saver { width: 100%; height: 100%; display: block; image-rendering: pixelated; }
+.saverlabel {
+  position: absolute; left: 0; top: 0; display: flex; flex-direction: column; gap: 2px;
+  padding: 6px 10px; background: var(--putty); box-shadow: var(--raised); font-size: 13px; color: var(--ink);
+  max-width: min(420px, 80vw); will-change: transform;
+}
+.saverlabel .t { background: var(--title); color: var(--chalk); font-weight: 700; margin: -6px -10px 2px; padding: 3px 10px; }
+.saverlyric {
+  position: absolute; left: 0; right: 0; bottom: 14%; text-align: center; padding: 0 16px;
+  font-family: 'VT323', monospace; font-size: clamp(28px, 5vw, 56px); color: var(--led); text-shadow: 0 0 12px var(--led);
+}
+
 #ytDock { position: fixed; left: -9999px; top: 0; width: 260px; height: 200px; }
 
 @media (max-width: 560px) {

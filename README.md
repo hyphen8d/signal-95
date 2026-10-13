@@ -31,6 +31,7 @@ Everything works with the mouse, and everything has a key.
 | Station → Copy Station Link | `K` | Copy a link to the station you are on |
 | View → Lyrics | `L` | Show the words on the display, in time |
 | View → Weather | `W` | The local forecast (asks first) |
+| View → Screensaver | `V` | Screensaver now (any key or mouse movement returns) |
 | Guide → Station Guide | `G` | Browse the stations and their playlists |
 | Menu bar | `Alt+letter` `F10` | Open a menu (arrows move, Enter chooses, Esc closes) |
 

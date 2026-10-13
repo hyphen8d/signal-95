@@ -20,6 +20,8 @@ const { createSound } = await import(`./sound.js?v=${V}`)
 const { createLyrics, instrumentalIdSet, lyricLine } = await import(`./lyrics.js?v=${V}`)
 const W = await import(`./weather.js?v=${V}`)
 const liners = await import(`./liners.js?v=${V}`)
+const SV = await import(`./screensaver.js?v=${V}`)
+const { ENGINE_FACTORIES } = await import(`./saver-engines.js?v=${V}`)
 
 const SCAN_DWELL_MS = 6000
 const FLASH_MS = 1600
@@ -47,6 +49,7 @@ const state = {
   secrets: [],           // SIGNAL's secret stations: off the dial, not off the air
   showLyrics: false,     // the display's mode: Now Playing, or the lyric crawl
   weatherConsent: null,  // 'yes' | 'no' | null (never asked) -- the ONLY weather state saved
+  saverIdle: null,       // start the screensaver after idle? null = the default (see start())
   duck: 1,               // the music's share under a spoken ID, 0.5..1
   sleepMinutes: 0,       // the sleep timer's step: 0 (off), 60, 30, 15
   sleepUntil: null,      // its deadline (a deadline, not a countdown -- see tickSleep)
@@ -73,7 +76,7 @@ function restore() {
 }
 function persist() {
   try {
-    localStorage.setItem(STORE_KEY, JSON.stringify({ band: state.band, freq: state.freq, lastFreq: state.lastFreq, muted: state.muted, volume: state.volume, showLyrics: state.showLyrics, weatherConsent: state.weatherConsent }))
+    localStorage.setItem(STORE_KEY, JSON.stringify({ band: state.band, freq: state.freq, lastFreq: state.lastFreq, muted: state.muted, volume: state.volume, showLyrics: state.showLyrics, weatherConsent: state.weatherConsent, saverIdle: state.saverIdle }))
   } catch (e) {}
 }
 
@@ -142,6 +145,127 @@ function remember(station) {
 function stopPlayback() {
   state.track = null
   if (player) player.stop()
+}
+
+// ---------------------------------------------------------------- screensaver
+// screensaver.js has the rules (and the argument for idle start, which
+// SIGNAL retired for its visualizer); saver-engines.js draws. Here: input,
+// the loop, the drifting now-playing box and the lyric line.
+
+const reducedMotion = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
+const saver = { active: false, engine: null, raf: 0, last: 0, t0: 0, startedAt: 0, stationId: undefined, from: null, box: null }
+let lastInputAt = Date.now()
+const SAVER_GRACE_MS = 300 // the key or click that started it must not end it
+
+function sizeSaver() {
+  const c = $('saver')
+  c.width = Math.max(1, Math.round(innerWidth))
+  c.height = Math.max(1, Math.round(innerHeight))
+  saver.engine?.resize(c.width, c.height)
+}
+
+function buildSaverEngine() {
+  const s = state.station
+  const cfg = SV.saverFor(s)
+  const sc = schemeFor(s)
+  const c = $('saver')
+  saver.engine = ENGINE_FACTORIES[cfg.engine](c.width, c.height, { a: sc.led, b: sc.title, c: '#F4F2EC' }, { ...cfg, motion: reducedMotion ? 0.25 : 1 })
+  saver.stationId = s?.id ?? null
+  const ctx = c.getContext('2d')
+  ctx.fillStyle = '#000'
+  ctx.fillRect(0, 0, c.width, c.height)
+}
+
+function startSaver() {
+  if (saver.active || modal) return
+  menuBar?.close()
+  ctxMenu?.close()
+  $('saverWrap').hidden = false
+  sizeSaver()
+  buildSaverEngine()
+  saver.active = true
+  saver.startedAt = Date.now()
+  saver.from = null
+  saver.box = null
+  saver.last = performance.now()
+  saver.t0 = saver.last
+  saver.raf = requestAnimationFrame(saverFrame)
+  announce('Screensaver. Any key returns.', 'saver')
+}
+
+function stopSaver() {
+  if (!saver.active) return
+  saver.active = false
+  cancelAnimationFrame(saver.raf)
+  saver.engine = null
+  $('saverWrap').hidden = true
+  lastInputAt = Date.now()
+}
+
+function saverFrame(now) {
+  if (!saver.active) return
+  const dt = Math.min(0.05, (now - saver.last) / 1000)
+  saver.last = now
+  const t = (now - saver.t0) / 1000
+  // Re-tuned underneath (a scan, Lock On from the menu before it started):
+  // the station's own engine and colours follow.
+  if ((state.station?.id ?? null) !== saver.stationId) buildSaverEngine()
+  const live = state.power && !state.muted && state.station
+  const ctx = $('saver').getContext('2d')
+  saver.engine.draw(ctx, dt, t, live ? SV.syntheticAudio(t) : SV.SILENT_AUDIO)
+  drawSaverOverlay(dt)
+  saver.raf = requestAnimationFrame(saverFrame)
+}
+
+/** The now-playing box drifts, bouncing off the edges, so no part of the
+ *  screen holds it for long -- what the era's savers were FOR. Under
+ *  reduced motion it sits still in a corner. */
+function drawSaverOverlay(dt) {
+  const s = state.station
+  const call = s ? `SIGNAL-95 · ${s.callsign}` : 'SIGNAL-95'
+  const track = state.power ? (state.track ? `${state.track.title} — ${state.track.artist}` : 'Searching…') : 'Power is off'
+  if ($('saverCall').textContent !== call) $('saverCall').textContent = call
+  if ($('saverTrack').textContent !== track) $('saverTrack').textContent = track
+  const box = $('saverLabel')
+  const W = innerWidth - box.offsetWidth
+  const H = innerHeight - box.offsetHeight
+  if (!saver.box) saver.box = reducedMotion ? { x: 24, y: Math.max(0, H - 24), vx: 0, vy: 0 } : { x: Math.random() * Math.max(0, W), y: Math.random() * Math.max(0, H), vx: 38, vy: 27 }
+  const b = saver.box
+  b.x += b.vx * dt
+  b.y += b.vy * dt
+  if (b.x < 0 || b.x > W) { b.vx *= -1; b.x = Math.max(0, Math.min(W, b.x)) }
+  if (b.y < 0 || b.y > H) { b.vy *= -1; b.y = Math.max(0, Math.min(H, b.y)) }
+  box.style.transform = `translate(${Math.round(b.x)}px, ${Math.round(b.y)}px)`
+  // With lyrics on, the current line, large, on the tube.
+  const rows = lyricRows()
+  const line = rows && rows[0] !== '♪' ? rows[0] : ''
+  if ($('saverLyric').textContent !== line) $('saverLyric').textContent = line
+}
+
+function wireSaverInput() {
+  const wake = (e) => {
+    if (!saver.active) { lastInputAt = Date.now(); return }
+    // Swallowed, not acted on: the key that wakes the screen does nothing
+    // else, so it cannot power the set off on its way back.
+    e.preventDefault()
+    e.stopImmediatePropagation()
+    if (Date.now() - saver.startedAt >= SAVER_GRACE_MS) stopSaver()
+  }
+  for (const type of ['keydown', 'pointerdown', 'wheel', 'touchstart']) window.addEventListener(type, wake, { capture: true, passive: false })
+  // A real movement, not a twitch: the first pointermove after starting is
+  // where the hand already was, so it only sets the reference point.
+  window.addEventListener('pointermove', (e) => {
+    if (!saver.active) { lastInputAt = Date.now(); return }
+    if (!saver.from) { saver.from = [e.clientX, e.clientY]; return }
+    if (Math.hypot(e.clientX - saver.from[0], e.clientY - saver.from[1]) > 8 && Date.now() - saver.startedAt >= SAVER_GRACE_MS) stopSaver()
+  }, true)
+  window.addEventListener('resize', () => { if (saver.active) { sizeSaver(); saver.box = null } })
+}
+
+function toggleSaverIdle() {
+  state.saverIdle = !state.saverIdle
+  persist()
+  flash(state.saverIdle ? 'Screensaver after idle: on' : 'Screensaver after idle: off')
 }
 
 // ---------------------------------------------------------------- sleep timer
@@ -557,7 +681,7 @@ function togglePower() {
   // The power key is a user gesture -- the moment an AudioContext may start.
   if (state.power) sound.start()
   if (state.power && state.station) { sound.handshake(); tuneIn(state.station); stationId(state.station, false) }
-  if (!state.power) { stopScan(); clearSleep(); sound.cancelHandshake(); sound.cancelIdent(); clearDuck(); remember(state.station); stopPlayback() }
+  if (!state.power) { stopSaver(); stopScan(); clearSleep(); sound.cancelHandshake(); sound.cancelIdent(); clearDuck(); remember(state.station); stopPlayback() }
   announce(state.power ? 'Power on' : 'Power off', 'power')
   render()
 }
@@ -655,6 +779,9 @@ function drawVolume() {
 const focusables = (el) => [...el.querySelectorAll('button, a[href], [tabindex="0"]')].filter((f) => !f.disabled)
 
 function openModal(id, onEscape) {
+  // A dialog is never hidden behind the screensaver -- Signal Lost can
+  // arrive while it is up.
+  stopSaver()
   if (modal) closeModal({ restore: false })
   menuBar?.close()
   ctxMenu?.close()
@@ -1139,6 +1266,7 @@ function onKey(e) {
   else if (k === 'l' || k === 'L') toggleLyrics()
   else if (k === 'w' || k === 'W') openWeather()
   else if (k === 't' || k === 'T') cycleSleep()
+  else if (k === 'v' || k === 'V') startSaver()
   else if (k === '=' || k === '+') nudgeVolume(1)
   else if (k === '-' || k === '_') nudgeVolume(-1)
   else return
@@ -1270,6 +1398,9 @@ function menus() {
       items: () => [
         { label: '&Lyrics', shortcut: 'L', type: 'check', checked: state.showLyrics, action: toggleLyrics },
         { label: '&Weather…', shortcut: 'W', action: openWeather },
+        { separator: true },
+        { label: '&Screensaver', shortcut: 'V', action: startSaver },
+        { label: 'Screensaver After &Idle', type: 'check', checked: !!state.saverIdle, action: toggleSaverIdle },
       ],
     },
     {
@@ -1312,7 +1443,12 @@ export async function start() {
     if (typeof saved.volume === 'number') state.volume = mix.clampVolume(saved.volume)
     state.showLyrics = !!saved.showLyrics
     if (saved.weatherConsent === 'yes' || saved.weatherConsent === 'no') state.weatherConsent = saved.weatherConsent
+    if (typeof saved.saverIdle === 'boolean') state.saverIdle = saved.saverIdle
   }
+  // Idle start defaults on -- the era's behaviour -- except for anyone
+  // whose system asks for reduced motion, who has to ask for it.
+  if (state.saverIdle === null) state.saverIdle = !reducedMotion
+  wireSaverInput()
   // The bus's level before anything can sound: without this the static
   // would play at full until the YouTube player finished loading (or, with
   // YouTube unreachable, forever).
@@ -1349,6 +1485,10 @@ export async function start() {
   // Lyric lines change mid-second; a quarter-second tick, only while the
   // crawl is up, keeps them on the beat without redrawing the rest 4x.
   setInterval(() => { if (lyricRows()) render() }, 250)
+  setInterval(() => {
+    if (SV.shouldIdleStart({ enabled: state.saverIdle, active: saver.active, power: state.power, tuned: !!state.station,
+      blocked: !!modal || !!menuBar?.isOpen() || !!ctxMenu?.isOpen(), now: Date.now(), lastInputAt })) startSaver()
+  }, 1000)
   // A quarter-second sleep tick so the 30s fade is a slope, not 30 steps.
   setInterval(tickSleep, 250)
 
