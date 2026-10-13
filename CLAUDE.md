@@ -137,6 +137,24 @@ holds focus (Tab cycles, Esc does the dialog's escape action) and gives
 focus back on close. The scheme's CSS variables are set on the document
 root, not the window, so menus and dialogs wear the station's colours.
 
+### The station guide
+
+`G`, or Guide → Station Guide (2026-10-13). SIGNAL's `[G]` as a window:
+every public station on both bands in a listbox on the left, the selected
+one's frequency, preset, tagline, `desc` and full playlist on the right.
+Three choices worth keeping:
+
+- **Browsing selects, it does not tune.** Arrows, Home/End, PageUp/Down
+  and clicks move the selection; only Tune In, Enter or a double-click
+  tunes. Looking at what else is on must never interrupt what is playing.
+- **It stays open after tuning**, and Tune In turns into a disabled
+  "Tuned In" on the station already playing. The label is the feedback,
+  since the status bar is behind the dialog. Tuning hands focus back to the
+  list (a button disabling itself under focus drops focus to the body).
+- **The detail pane previews the selected station's scheme**, through
+  `--accent` on `#guideDetail`; the list's highlight stays in the playing
+  station's colours.
+
 ### The dev server mounts two repos
 
 `/signal-95/` is this repo and `/signal/` is SIGNAL's checkout -- the
@@ -192,8 +210,7 @@ and deleting the dot rule were both checked to turn the suite red.
 
 ## Not built yet
 
-The station guide window, the
-right-click preset menu, volume control, static/handshake audio between
+The right-click preset menu, volume control, static/handshake audio between
 stations, station IDs, lyrics, weather, the secret stations (handed over
 by `roster.js` as `secretStations`, not on the dial -- they must stay
 generic on `station.secret`, as in SIGNAL), mid-song joins, persistence
