@@ -220,6 +220,20 @@ Known soft spot: a stale CUED that arrives after the next cue but before
 its video is ready may read a duration of 0 and start that track at the
 top -- a missed join, never a wrong station.
 
+### Station schemes (2026-10-13)
+
+All sixteen public stations have one (`schemes.js`): an invented name, a
+title-bar colour and a display colour, drawn from the station's tagline
+and genre. Two rules hold them, both in `tests/schemes.test.mjs`:
+legibility (chalk on the title bar and the display on the tube, both
+4.5:1), and **distinctness as a set** -- every pair of schemes must differ
+by a CIELAB distance of 35 or more, title and display summed. The floor is
+the closest pair the style board approved (Feedback and Last Call, ~37).
+The first draft of the thirteen new ones failed it five times, which is
+the point: a palette this size grows look-alikes nobody notices one at a
+time. Rendered and reviewed as a contact sheet of the real app before
+shipping (added to the style board).
+
 ### The dev server mounts two repos
 
 `/signal-95/` is this repo and `/signal/` is SIGNAL's checkout -- the
@@ -287,8 +301,7 @@ The right-click preset menu, volume control, station IDs, lyrics,
 weather, the secret stations (handed over by `roster.js` as
 `secretStations`, not on the dial -- they must stay generic on
 `station.secret`, as in SIGNAL), persistence beyond band/frequency/mute,
-schemes for the 13 stations still on the house scheme, and a DOM test
-harness.
+and a DOM test harness.
 
 Deploy is GitHub Pages from `main` (live since 2026-10-12 at
 hyphen8d.github.io/signal-95): every push to main ships, so
