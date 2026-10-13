@@ -12,7 +12,7 @@ const dial = await import(`./dial.js?v=${V}`)
 const { schemeFor, SCHEMES } = await import(`./schemes.js?v=${V}`)
 const { loadRoster } = await import(`./roster.js?v=${V}`)
 const { createPlayer } = await import(`./player.js?v=${V}`)
-const { createMenuBar } = await import(`./menus.js?v=${V}`)
+const { createMenuBar, createContextMenu } = await import(`./menus.js?v=${V}`)
 const { CONTROLS } = await import(`./controls.js?v=${V}`)
 const mix = await import(`./mix.js?v=${V}`)
 const broadcast = await import(`./broadcast.js?v=${V}`)
@@ -46,6 +46,7 @@ const state = {
 let player = null
 const sound = createSound()
 let menuBar = null
+let ctxMenu = null
 let modal = null       // { el, onEscape, returnTo } while a dialog is up
 
 // ---------------------------------------------------------------- storage
@@ -276,6 +277,7 @@ const focusables = (el) => [...el.querySelectorAll('button, a[href], [tabindex="
 function openModal(id, onEscape) {
   if (modal) closeModal({ restore: false })
   menuBar?.close()
+  ctxMenu?.close()
   const el = $(id)
   el.hidden = false
   modal = { el, onEscape, returnTo: document.activeElement }
@@ -430,10 +432,11 @@ function guideTune() {
   $('guideList').focus()
 }
 
-function openGuide() {
+/** Open the guide on `station`, or on the one you're tuned to. */
+function openGuide(station) {
   if (!$('guideList').children.length) buildGuideList()
   const { station: near } = dial.nearest(state.stations, state.band, state.freq)
-  guideSel = state.station ?? near ?? guideStations()[0]
+  guideSel = station ?? state.station ?? near ?? guideStations()[0]
   openModal('guide', closeModal)
   renderGuide()
   // The list, not a button, takes focus: arrows are what you reach for.
@@ -511,6 +514,20 @@ function buildBand() {
     b.setAttribute('aria-label', `Preset ${i + 1}: ${s.callsign}`)
     b.dataset.id = s.id
     b.addEventListener('click', () => preset(i + 1))
+    // The preset menu: right-click, or Shift+F10 / the Menu key on a
+    // focused preset (the keyboard's way to the same menu).
+    b.addEventListener('contextmenu', (e) => {
+      e.preventDefault()
+      presetMenu(s, e.clientX, e.clientY, false, b)
+    })
+    b.addEventListener('keydown', (e) => {
+      if ((e.key === 'F10' && e.shiftKey) || e.key === 'ContextMenu') {
+        e.preventDefault()
+        e.stopPropagation()
+        const r = b.getBoundingClientRect()
+        presetMenu(s, r.left, r.bottom + 2, true, b)
+      }
+    })
     presets.append(b)
   })
   const d = $('dial')
@@ -691,6 +708,7 @@ function wireMouse() {
 // belongs to the menu bar, so the radio's own keys ignore it.
 function onKey(e) {
   if (modal) { modalKey(e); return }
+  if (ctxMenu?.handleKey(e)) return
   if (menuBar?.handleKey(e)) return
   if (e.ctrlKey || e.metaKey || e.altKey) return
   const k = e.key
@@ -705,10 +723,63 @@ function onKey(e) {
   else if (k === 's' || k === 'S') toggleScan()
   else if (k === 'b' || k === 'B') setBand(state.band === 'ym' ? 'zm' : 'ym')
   else if (k === 'g' || k === 'G') openGuide()
+  else if (k === 'k' || k === 'K') copyLink(state.station)
   else if (k === '=' || k === '+') nudgeVolume(1)
   else if (k === '-' || k === '_') nudgeVolume(-1)
   else return
   e.preventDefault()
+}
+
+// ---------------------------------------------------------------- preset menu
+// Three things, each a thing the set can already do -- no Move or Clear:
+// presets here ARE the stations in dial order (SIGNAL's model, and part of
+// what the two apps share), so editing them would mean a second, private
+// preset system. A menu item that only promised one would be a dead entry.
+
+function presetMenu(s, x, y, viaKeyboard, button) {
+  const n = dial.stationsOn(state.stations, s.band).indexOf(s) + 1
+  button.focus({ preventScroll: true })
+  ctxMenu.open([
+    { label: `&Tune to ${s.callsign}`, shortcut: String(n), action: () => tuneStation(s) },
+    { label: 'Station &Info…', shortcut: 'G', action: () => openGuide(s) },
+    { separator: true },
+    { label: '&Copy Station Link', shortcut: s === state.station ? 'K' : '', action: () => copyLink(s) },
+  ], x, y, { label: `Preset ${n}: ${s.callsign}`, viaKeyboard })
+}
+
+/** A link that lands on `s`: this page with ?station=<id>, the same
+ *  parameter SIGNAL reads, so a link to one radio's station opens the
+ *  other's on the same station by swapping the path. */
+function stationLink(s) {
+  const u = new URL(location.href)
+  u.search = `?station=${encodeURIComponent(s.id)}`
+  u.hash = ''
+  return u.href
+}
+
+async function copyLink(s) {
+  if (!s) { flash('Tune to a station to copy its link'); return }
+  const link = stationLink(s)
+  let ok = false
+  try {
+    await navigator.clipboard.writeText(link)
+    ok = true
+  } catch (e) {
+    // No async clipboard (plain http over a tailnet address is not a
+    // secure context): the old way, through a selected textarea.
+    const ta = document.createElement('textarea')
+    ta.value = link
+    ta.setAttribute('readonly', '')
+    ta.style.position = 'fixed'
+    ta.style.left = '-9999px'
+    document.body.append(ta)
+    ta.select()
+    try { ok = document.execCommand('copy') } catch (e2) {}
+    ta.remove()
+  }
+  const msg = ok ? `Link to ${s.callsign} copied` : "Couldn't copy the link"
+  flash(msg)
+  announce(msg, 'copy')
 }
 
 // ---------------------------------------------------------------- menus
@@ -727,6 +798,8 @@ function menus() {
         { label: 'Volume &Up', shortcut: '+', action: () => nudgeVolume(1) },
         { label: 'Volume &Down', shortcut: '−', action: () => nudgeVolume(-1) },
         { label: '&Mute', shortcut: 'M', type: 'check', checked: state.muted, action: toggleMute },
+        { separator: true },
+        { label: '&Copy Station Link', shortcut: 'K', disabled: !state.station, action: () => copyLink(state.station) },
       ],
     },
     {
@@ -804,7 +877,8 @@ export async function start() {
   // A scan keeps running under an open menu: the Scan item's check mark
   // reads the state when the menu opened, and stopping it here would make
   // that mark wrong the moment it was drawn.
-  menuBar = createMenuBar($('menubar'), menus())
+  ctxMenu = createContextMenu(document.body, { onOpen: () => menuBar?.close() })
+  menuBar = createMenuBar($('menubar'), menus(), { onOpen: () => ctxMenu.close() })
   document.addEventListener('keydown', onKey)
   new ResizeObserver(() => { if (state.builtBand) placeMarks() }).observe($('dial'))
   // Webfonts change label widths; measure again once they are in.
@@ -812,7 +886,17 @@ export async function start() {
 
   const first = dial.stationsOn(state.stations, state.band)
   const pick = first[Math.floor(Math.random() * first.length)]
-  tune(saved?.freq ?? pick?.freq ?? dial.bandFor(state.band).freqMin)
+  // ?station=<id> -- a link someone copied -- wins over where you left the
+  // dial. An id this roster does not have (renamed, or a secret station)
+  // is ignored rather than refused: the set still boots, just where it
+  // would have anyway.
+  const linked = state.stations.find((s) => s.id === new URLSearchParams(location.search).get('station'))
+  if (linked) {
+    state.band = linked.band
+    tune(linked.freq)
+  } else {
+    tune(saved?.freq ?? pick?.freq ?? dial.bandFor(state.band).freqMin)
+  }
 
   setInterval(render, 1000) // the clock, the elapsed time and the buffer meter
 

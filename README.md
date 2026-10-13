@@ -24,6 +24,8 @@ Everything works with the mouse, and everything has a key.
 | Scan | `S` | Visit each station in turn |
 | Volume slider (press, drag or wheel) | `−` `+` | Volume down / up |
 | Speaker button | `M` | Mute |
+| Right-click a preset | `Shift+F10` | Preset menu: tune, station info, copy link |
+| Station → Copy Station Link | `K` | Copy a link to the station you are on |
 | Guide → Station Guide | `G` | Browse the stations and their playlists |
 | Menu bar | `Alt+letter` `F10` | Open a menu (arrows move, Enter chooses, Esc closes) |
 

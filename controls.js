@@ -17,6 +17,8 @@ export const CONTROLS = [
   { mouse: 'Scan', keys: ['S'], does: 'Visit each station in turn' },
   { mouse: 'Volume slider (press, drag or wheel)', keys: ['−', '+'], does: 'Volume down / up' },
   { mouse: 'Speaker button', keys: ['M'], does: 'Mute' },
+  { mouse: 'Right-click a preset', keys: ['Shift+F10'], does: 'Preset menu: tune, station info, copy link' },
+  { mouse: 'Station → Copy Station Link', keys: ['K'], does: 'Copy a link to the station you are on' },
   { mouse: 'Guide → Station Guide', keys: ['G'], does: 'Browse the stations and their playlists' },
   { mouse: 'Menu bar', keys: ['Alt+letter', 'F10'], does: 'Open a menu (arrows move, Enter chooses, Esc closes)' },
 ]

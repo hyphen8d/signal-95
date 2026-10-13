@@ -78,6 +78,148 @@ const svg = (body) => `<svg width="10" height="10" viewBox="0 0 10 10" aria-hidd
 const CHECK = svg('<path d="M1.5 5.5l2.5 2.5 4.5-6" fill="none" stroke="currentColor" stroke-width="1.8"/>')
 const DOT = svg('<circle cx="5" cy="5" r="2.5" fill="currentColor"/>')
 
+/** Fill a popup with its items' rows. Shared by the menu bar and the
+ *  context menu, so the two cannot drift apart in how an item looks or
+ *  answers. Returns the rows, null where an entry is not choosable. */
+function renderRows(popup, items, idPrefix, setHi, choose) {
+  return items.map((it, j) => {
+    if (it.separator) {
+      const s = document.createElement('div')
+      s.className = 'sepline'
+      s.setAttribute('role', 'separator')
+      popup.append(s)
+      return null
+    }
+    if (it.heading) {
+      const h = document.createElement('div')
+      h.className = 'heading'
+      h.setAttribute('role', 'presentation')
+      h.textContent = it.heading
+      popup.append(h)
+      return null
+    }
+    const r = document.createElement('div')
+    r.className = 'item'
+    r.id = `${idPrefix}-item-${j}`
+    r.setAttribute('role', it.type === 'check' ? 'menuitemcheckbox' : it.type === 'radio' ? 'menuitemradio' : 'menuitem')
+    if (it.type) r.setAttribute('aria-checked', String(!!it.checked))
+    if (it.disabled) r.setAttribute('aria-disabled', 'true')
+    const mark = document.createElement('span')
+    mark.className = 'mark'
+    if (it.checked) mark.innerHTML = it.type === 'radio' ? DOT : CHECK
+    const label = document.createElement('span')
+    label.append(...labelNodes(it.label))
+    const sc = document.createElement('span')
+    sc.className = 'shortcut'
+    sc.textContent = it.shortcut ?? ''
+    r.append(mark, label, sc)
+    r.addEventListener('pointerenter', () => setHi(actionable(it) ? j : -1))
+    r.addEventListener('click', () => choose(j))
+    popup.append(r)
+    return r
+  })
+}
+
+/** The keys an open popup answers, for both kinds of menu: move, choose,
+ *  an item's letter. Returns 'moved', 'chose', or '' for a key it has no
+ *  use for. */
+function popupKey(e, items, hi, setHi, choose) {
+  const k = e.key
+  if (k === 'ArrowDown') { setHi(nextIndex(items, hi, 1)); return 'moved' }
+  if (k === 'ArrowUp') { setHi(nextIndex(items, hi < 0 ? items.length : hi, -1)); return 'moved' }
+  if (k === 'Home') { setHi(nextIndex(items, -1, 1)); return 'moved' }
+  if (k === 'End') { setHi(nextIndex(items, items.length, -1)); return 'moved' }
+  if (k === 'Enter' || k === ' ') { if (hi >= 0) choose(hi); return 'chose' }
+  if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+    const j = accelIndex(items, codeChar(e.code))
+    if (j >= 0) { choose(j); return 'chose' }
+  }
+  return ''
+}
+
+/** A right-click menu: one at a time, opened at a point, closed by a
+ *  choice, Escape, Tab or a press anywhere else. Keyboard-opened (Shift+
+ *  F10 or the Menu key, the era's convention) it highlights its first
+ *  item; mouse-opened it highlights nothing until you move over it. Focus
+ *  goes back to whatever had it -- normally the control you right-clicked.
+ *  While open it owns the keyboard, as an open menu-bar menu does. */
+export function createContextMenu(host, { onOpen } = {}) {
+  let popup = null
+  let items = []
+  let rows = []
+  let hi = -1
+  let returnFocus = null
+
+  function setHi(i) {
+    hi = i
+    rows.forEach((r, j) => r?.classList.toggle('hi', j === hi))
+    if (popup) {
+      if (hi >= 0 && rows[hi]) popup.setAttribute('aria-activedescendant', rows[hi].id)
+      else popup.removeAttribute('aria-activedescendant')
+    }
+  }
+
+  function close({ restore = true } = {}) {
+    if (!popup) return
+    popup.remove()
+    popup = null
+    rows = []
+    items = []
+    hi = -1
+    const back = returnFocus
+    returnFocus = null
+    if (restore && back && back.isConnected && back !== document.body) back.focus({ preventScroll: true })
+  }
+
+  function choose(j) {
+    const it = items[j]
+    if (!actionable(it) || !it.action) return
+    close()
+    it.action()
+  }
+
+  /** Open at viewport point (x, y), kept on screen. */
+  function open(list, x, y, { label = 'Menu', viaKeyboard = false } = {}) {
+    close({ restore: false })
+    onOpen?.()
+    returnFocus = document.activeElement
+    items = list
+    popup = document.createElement('div')
+    popup.className = 'menu context'
+    popup.setAttribute('role', 'menu')
+    popup.setAttribute('aria-label', label)
+    popup.tabIndex = -1
+    rows = renderRows(popup, items, 'ctx', setHi, choose)
+    host.append(popup)
+    const w = popup.offsetWidth
+    const h = popup.offsetHeight
+    popup.style.left = `${Math.max(4, Math.min(x, window.innerWidth - w - 4))}px`
+    popup.style.top = `${Math.max(4, Math.min(y, window.innerHeight - h - 4))}px`
+    popup.focus({ preventScroll: true })
+    setHi(viaKeyboard ? nextIndex(items, -1, 1) : -1)
+  }
+
+  document.addEventListener('pointerdown', (e) => {
+    if (popup && !popup.contains(e.target)) close({ restore: false })
+  }, true)
+  window.addEventListener('blur', () => close({ restore: false }))
+  window.addEventListener('resize', () => close({ restore: false }))
+
+  function handleKey(e) {
+    if (!popup) return false
+    // Alt is the way to the menu bar: step aside for it rather than
+    // swallowing it (the first cut ate Alt+S with a preset menu open, and
+    // the menu bar never came).
+    if (e.altKey && !e.ctrlKey && !e.metaKey && codeChar(e.code)) { close({ restore: false }); return false }
+    const swallow = () => { e.preventDefault(); e.stopPropagation(); return true }
+    if (e.key === 'Escape' || e.key === 'Tab') { close(); return swallow() }
+    popupKey(e, items, hi, setHi, choose)
+    return swallow()
+  }
+
+  return { open, close: () => close(), handleKey, isOpen: () => !!popup }
+}
+
 export function createMenuBar(bar, menus, { onOpen } = {}) {
   let open = -1
   let hi = -1
@@ -149,42 +291,7 @@ export function createMenuBar(bar, menus, { onOpen } = {}) {
     popup.tabIndex = -1
     popup.style.left = `${title.offsetLeft}px`
     popup.style.top = `${title.offsetTop + title.offsetHeight}px`
-    rows = items.map((it, j) => {
-      if (it.separator) {
-        const s = document.createElement('div')
-        s.className = 'sepline'
-        s.setAttribute('role', 'separator')
-        popup.append(s)
-        return null
-      }
-      if (it.heading) {
-        const h = document.createElement('div')
-        h.className = 'heading'
-        h.setAttribute('role', 'presentation')
-        h.textContent = it.heading
-        popup.append(h)
-        return null
-      }
-      const r = document.createElement('div')
-      r.className = 'item'
-      r.id = `${title.id}-item-${j}`
-      r.setAttribute('role', it.type === 'check' ? 'menuitemcheckbox' : it.type === 'radio' ? 'menuitemradio' : 'menuitem')
-      if (it.type) r.setAttribute('aria-checked', String(!!it.checked))
-      if (it.disabled) r.setAttribute('aria-disabled', 'true')
-      const mark = document.createElement('span')
-      mark.className = 'mark'
-      if (it.checked) mark.innerHTML = it.type === 'radio' ? DOT : CHECK
-      const label = document.createElement('span')
-      label.append(...labelNodes(it.label))
-      const sc = document.createElement('span')
-      sc.className = 'shortcut'
-      sc.textContent = it.shortcut ?? ''
-      r.append(mark, label, sc)
-      r.addEventListener('pointerenter', () => setHi(actionable(it) ? j : -1))
-      r.addEventListener('click', () => choose(j))
-      popup.append(r)
-      return r
-    })
+    rows = renderRows(popup, items, title.id, setHi, choose)
     bar.append(popup)
     popup.focus({ preventScroll: true })
     setHi(viaKeyboard ? nextIndex(items, -1, 1) : -1)
@@ -227,7 +334,8 @@ export function createMenuBar(bar, menus, { onOpen } = {}) {
     if (open < 0) {
       const t = titleAccel(e)
       if (t >= 0) { openMenu(t, true); return swallow() }
-      if (k === 'F10' && !e.altKey && !e.ctrlKey && !e.metaKey) { openMenu(0, true); return swallow() }
+      // Plain F10 only: Shift+F10 is the context-menu key (app.js).
+      if (k === 'F10' && !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey) { openMenu(0, true); return swallow() }
       const focused = titles.indexOf(document.activeElement)
       if (focused >= 0) {
         if (k === 'ArrowRight' || k === 'ArrowLeft') {
@@ -253,19 +361,11 @@ export function createMenuBar(bar, menus, { onOpen } = {}) {
       return swallow()
     }
     if (k === 'Tab') { close(); return swallow() }
-    if (k === 'ArrowDown') { setHi(nextIndex(items, hi, 1)); return swallow() }
-    if (k === 'ArrowUp') { setHi(nextIndex(items, hi < 0 ? items.length : hi, -1)); return swallow() }
-    if (k === 'Home') { setHi(nextIndex(items, -1, 1)); return swallow() }
-    if (k === 'End') { setHi(nextIndex(items, items.length, -1)); return swallow() }
     if (k === 'ArrowRight' || k === 'ArrowLeft') {
       openMenu((open + (k === 'ArrowRight' ? 1 : -1) + menus.length) % menus.length, true)
       return swallow()
     }
-    if (k === 'Enter' || k === ' ') { if (hi >= 0) choose(hi); return swallow() }
-    if (!e.ctrlKey && !e.metaKey) {
-      const j = accelIndex(items, codeChar(e.code))
-      if (j >= 0) { choose(j); return swallow() }
-    }
+    popupKey(e, items, hi, setHi, choose)
     // Anything else is swallowed too: an open menu owns the keyboard.
     return swallow()
   }

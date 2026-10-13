@@ -220,6 +220,29 @@ Known soft spot: a stale CUED that arrives after the next cue but before
 its video is ready may read a duration of 0 and start that track at the
 top -- a missed join, never a wrong station.
 
+### The preset menu and station links (2026-10-13)
+
+Right-click a preset (or Shift+F10 / the Menu key on a focused one):
+**Tune to …**, **Station Info…** (the guide, opened on that station),
+**Copy Station Link**. No Move or Clear, on purpose: presets here *are*
+the stations in dial order -- SIGNAL's model, and part of what the two
+apps share -- so editing them would mean a second, private preset system,
+and an item that only promised one would be a dead entry.
+
+- `createContextMenu()` in menus.js shares `renderRows()` and
+  `popupKey()` with the menu bar, so the two cannot drift in how an item
+  looks or answers. One is open at a time (each closes the other). An
+  open context menu owns the keyboard **except Alt+letter**, which closes
+  it and passes to the menu bar -- the first cut swallowed Alt+S.
+  Plain F10 is the menu bar's; Shift+F10 is this menu's.
+- **`?station=<id>`** lands on that station, over wherever you left the
+  dial -- the same parameter SIGNAL reads, so a link moves between the two
+  radios by swapping the path. An unknown id (renamed, secret) boots
+  normally rather than refusing. `K` (SIGNAL's key) or Station → Copy
+  Station Link copies the current one.
+- Copying falls back from `navigator.clipboard` (secure contexts only --
+  the tailnet address is plain http) to a selected textarea.
+
 ### Volume (2026-10-13)
 
 A slider beside the speaker button (press, drag, wheel; arrows, Home/End
@@ -324,7 +347,7 @@ and deleting the dot rule were both checked to turn the suite red.
 
 ## Not built yet
 
-The right-click preset menu, station IDs, lyrics,
+Station IDs, lyrics,
 weather, the secret stations (handed over by `roster.js` as
 `secretStations`, not on the dial -- they must stay generic on
 `station.secret`, as in SIGNAL), persistence beyond band/frequency/mute,
