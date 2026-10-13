@@ -9,7 +9,7 @@
 
 const V = globalThis.SIGNAL95_BUILD ?? ''
 const dial = await import(`./dial.js?v=${V}`)
-const { schemeFor } = await import(`./schemes.js?v=${V}`)
+const { schemeFor, SCHEMES } = await import(`./schemes.js?v=${V}`)
 const { loadRoster } = await import(`./roster.js?v=${V}`)
 const { createPlayer } = await import(`./player.js?v=${V}`)
 const { createMenuBar } = await import(`./menus.js?v=${V}`)
@@ -160,7 +160,7 @@ function toggleMute() {
 // Signal Lost did, found driving it headlessly) leaves the keyboard with
 // nothing it can press.
 
-const focusables = (el) => [...el.querySelectorAll('button, a[href]')].filter((f) => !f.disabled)
+const focusables = (el) => [...el.querySelectorAll('button, a[href], [tabindex="0"]')].filter((f) => !f.disabled)
 
 function openModal(id, onEscape) {
   if (modal) closeModal({ restore: false })
@@ -203,6 +203,130 @@ function openAbout() {
   $('aboutCount').textContent = String(state.stations.length)
   $('aboutRoster').textContent = state.rosterStamp
   openModal('about', closeModal)
+}
+
+// ---------------------------------------------------------------- the guide
+// SIGNAL's [G], as a window: every public station on both bands down the
+// left, the selected one's identity and full playlist on the right. Moving
+// through the list only SELECTS -- it does not tune, so browsing never
+// interrupts what is playing. Tune In (Enter, or a double-click) tunes, and
+// the guide stays open, because "what else is on?" is usually asked more
+// than once.
+
+let guideSel = null
+
+function guideStations() {
+  return dial.BANDS.flatMap((b) => dial.stationsOn(state.stations, b.key))
+}
+
+function buildGuideList() {
+  const list = $('guideList')
+  for (const b of dial.BANDS) {
+    const group = document.createElement('div')
+    group.setAttribute('role', 'group')
+    group.setAttribute('aria-label', `${b.label} Band`)
+    const head = document.createElement('div')
+    head.className = 'group'
+    head.setAttribute('aria-hidden', 'true')
+    head.textContent = `${b.label} Band`
+    group.append(head)
+    for (const s of dial.stationsOn(state.stations, b.key)) {
+      const o = document.createElement('div')
+      o.className = 'opt'
+      o.id = `guide-${s.id}`
+      o.setAttribute('role', 'option')
+      o.dataset.id = s.id
+      const name = document.createElement('span')
+      name.textContent = s.callsign
+      const f = document.createElement('span')
+      f.className = 'f'
+      f.textContent = s.freq.toFixed(1)
+      o.append(name, f)
+      o.addEventListener('click', () => { guideSel = s; list.focus(); renderGuide() })
+      o.addEventListener('dblclick', () => { guideSel = s; guideTune() })
+      group.append(o)
+    }
+    list.append(group)
+  }
+  list.addEventListener('keydown', (e) => {
+    const all = guideStations()
+    const i = all.indexOf(guideSel)
+    const go = (j) => { guideSel = all[Math.max(0, Math.min(all.length - 1, j))]; renderGuide() }
+    if (e.key === 'ArrowDown') go(i + 1)
+    else if (e.key === 'ArrowUp') go(i - 1)
+    else if (e.key === 'Home') go(0)
+    else if (e.key === 'End') go(all.length - 1)
+    else if (e.key === 'PageDown') go(i + 5)
+    else if (e.key === 'PageUp') go(i - 5)
+    else if (e.key === 'Enter') guideTune()
+    else return
+    e.preventDefault()
+  })
+}
+
+function renderGuide() {
+  const s = guideSel
+  if (!s) return
+  const list = $('guideList')
+  for (const o of list.querySelectorAll('.opt')) {
+    const sel = o.dataset.id === s.id
+    o.classList.toggle('sel', sel)
+    o.classList.toggle('on', o.dataset.id === state.station?.id)
+    o.setAttribute('aria-selected', String(sel))
+    if (sel) o.scrollIntoView({ block: 'nearest' })
+  }
+  list.setAttribute('aria-activedescendant', `guide-${s.id}`)
+
+  const band = dial.bandFor(s.band)
+  const n = dial.stationsOn(state.stations, s.band).indexOf(s) + 1
+  $('gCall').textContent = s.callsign
+  $('gWhere').textContent = `${s.freq.toFixed(1)} ${band.label}${n && n <= 9 ? ` · preset ${n}` : ''}`
+  $('gTag').textContent = s.tagline ?? ''
+  $('gDesc').textContent = s.desc ?? ''
+  // The detail pane previews the SELECTED station's scheme (its tagline
+  // wears it), not the playing one's -- the first cut drew NEON STASIS's
+  // line in DISTORTION FIELD's rust.
+  $('guideDetail').style.setProperty('--accent', schemeFor(s.id).title)
+  const scheme = SCHEMES[s.id]
+  $('gMeta').textContent = `${s.tracks.length} tracks on the playlist${scheme ? ` · scheme “${scheme.name}”` : ''}`
+  const ol = $('gTracks')
+  ol.replaceChildren(...s.tracks.map((t) => {
+    const li = document.createElement('li')
+    const by = document.createElement('span')
+    by.className = 'by'
+    by.textContent = ` — ${t.artist}`
+    li.append(t.title, by)
+    return li
+  }))
+  ol.scrollTop = 0
+  $('guideDetail').scrollTop = 0
+
+  // Disabled, and saying so, when it is the station already playing: the
+  // button's own label is the feedback, since the status bar is behind
+  // the dialog.
+  const here = s === state.station
+  const tuneBtn = $('guideTune')
+  tuneBtn.disabled = here
+  tuneBtn.textContent = here ? 'Tuned In' : 'Tune In'
+}
+
+function guideTune() {
+  if (!guideSel || guideSel === state.station) return
+  tuneStation(guideSel)
+  renderGuide()
+  // Tune In just disabled itself; if it had focus, focus would fall to the
+  // page body behind the dialog. Back to the list, where browsing goes on.
+  $('guideList').focus()
+}
+
+function openGuide() {
+  if (!$('guideList').children.length) buildGuideList()
+  const { station: near } = dial.nearest(state.stations, state.band, state.freq)
+  guideSel = state.station ?? near ?? guideStations()[0]
+  openModal('guide', closeModal)
+  renderGuide()
+  // The list, not a button, takes focus: arrows are what you reach for.
+  $('guideList').focus()
 }
 
 function openKeys() {
@@ -397,6 +521,8 @@ function wireMouse() {
   $('lostRetry').addEventListener('click', () => { closeModal(); if (state.track) play(state.track) })
   $('aboutOk').addEventListener('click', () => closeModal())
   $('keysOk').addEventListener('click', () => closeModal())
+  $('guideTune').addEventListener('click', guideTune)
+  $('guideClose').addEventListener('click', () => closeModal())
 
   // The dial: press anywhere to tune there, drag to sweep, wheel to nudge.
   const d = $('dial')
@@ -431,6 +557,7 @@ function onKey(e) {
   else if (k === 'm' || k === 'M') toggleMute()
   else if (k === 's' || k === 'S') toggleScan()
   else if (k === 'b' || k === 'B') setBand(state.band === 'ym' ? 'zm' : 'ym')
+  else if (k === 'g' || k === 'G') openGuide()
   else return
   e.preventDefault()
 }
@@ -488,6 +615,7 @@ function menus() {
     {
       id: 'guide', label: '&Guide',
       items: () => [
+        { label: '&Station Guide…', shortcut: 'G', action: openGuide },
         { label: '&Keyboard Shortcuts…', action: openKeys },
         { separator: true },
         { label: '&About SIGNAL-95…', action: openAbout },

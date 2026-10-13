@@ -105,6 +105,27 @@
   </section>
 </div>
 
+<div class="scrim" id="guide" hidden>
+  <section class="dialog guide raised" role="dialog" aria-modal="true" aria-labelledby="guideTitle">
+    <header class="titlebar"><h1 id="guideTitle">Station Guide</h1></header>
+    <div class="guidebody">
+      <div class="stationlist sunken" id="guideList" role="listbox" tabindex="0" aria-label="Stations"></div>
+      <div class="detail sunken" id="guideDetail">
+        <h2 id="gCall"></h2>
+        <p class="soft" id="gWhere"></p>
+        <p class="tagline" id="gTag"></p>
+        <p id="gDesc"></p>
+        <p class="soft" id="gMeta"></p>
+        <ol class="tracks" id="gTracks"></ol>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="btn def" id="guideTune">Tune In</button>
+      <button class="btn" id="guideClose">Close</button>
+    </div>
+  </section>
+</div>
+
 <div class="scrim" id="about" hidden>
   <section class="dialog raised" role="dialog" aria-modal="true" aria-labelledby="aboutTitle">
     <header class="titlebar"><h1 id="aboutTitle">About SIGNAL-95</h1></header>

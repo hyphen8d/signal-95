@@ -23,6 +23,7 @@ Everything works with the mouse, and everything has a key.
 | Band tabs | `B` | Switch between YM and ZM |
 | Scan | `S` | Visit each station in turn |
 | Speaker button | `M` | Mute |
+| Guide → Station Guide | `G` | Browse the stations and their playlists |
 | Menu bar | `Alt+letter` `F10` | Open a menu (arrows move, Enter chooses, Esc closes) |
 
 ## Running it locally

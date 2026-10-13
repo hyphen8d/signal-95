@@ -16,6 +16,7 @@ export const CONTROLS = [
   { mouse: 'Band tabs', keys: ['B'], does: 'Switch between YM and ZM' },
   { mouse: 'Scan', keys: ['S'], does: 'Visit each station in turn' },
   { mouse: 'Speaker button', keys: ['M'], does: 'Mute' },
+  { mouse: 'Guide → Station Guide', keys: ['G'], does: 'Browse the stations and their playlists' },
   { mouse: 'Menu bar', keys: ['Alt+letter', 'F10'], does: 'Open a menu (arrows move, Enter chooses, Esc closes)' },
 ]
 
