@@ -44,6 +44,10 @@
     <div class="sep" aria-hidden="true"></div>
     <div id="presets" role="group" aria-label="Presets" style="display:flex;gap:4px;flex-wrap:wrap"></div>
     <div class="spacer"></div>
+    <div class="volume" id="volume" role="slider" tabindex="0" aria-label="Volume" aria-valuemin="0" aria-valuemax="100" title="Volume (− +)">
+      <div class="voltrack sunken"><div class="volfill" id="volFill"></div></div>
+      <div class="volthumb" id="volThumb"></div>
+    </div>
     <button class="btn icon" id="mute" aria-label="Mute (M)" aria-pressed="false" title="Mute (M)">
       <svg width="16" height="14" viewBox="0 0 16 14" aria-hidden="true" fill="none" stroke="#2A2925" stroke-width="1.5"><path d="M1 5h3l4-3v10L4 9H1z" fill="#2A2925"/><path class="waves" d="M10.5 4.5a3.5 3.5 0 0 1 0 5M12.5 2.5a6.5 6.5 0 0 1 0 9"/></svg>
     </button>

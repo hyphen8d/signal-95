@@ -30,7 +30,20 @@ export function staticLevel(q) {
   return STATIC_MAX * s ** 1.5
 }
 
-/** The music's player volume, 0..100. Only heard while locked. */
+/** The listener's own level: SIGNAL's default and step. */
+export const DEFAULT_VOLUME = 70
+export const VOLUME_STEP = 10
+export const clampVolume = (v) => Math.min(100, Math.max(0, Math.round(v)))
+
+/** What the player is actually set to: the listener's volume, scaled by
+ *  how well the station is coming in. One multiplication, so the dial and
+ *  the slider can never overwrite each other. */
+export function effectiveVolume(volume, q) {
+  return Math.round((clampVolume(volume) * musicVolume(q)) / 100)
+}
+
+/** The music's share of the listener's volume, 0..100, from the signal.
+ *  Only heard while locked. */
 export function musicVolume(q) {
   const t = Math.min(1, Math.max(0, (q - LOCK_SIGNAL) / (1 - LOCK_SIGNAL)))
   return Math.round(70 + 30 * t)

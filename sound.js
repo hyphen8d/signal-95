@@ -147,6 +147,7 @@ export function createSound() {
   let staticGain = null
   let shake = null
   let muted = false
+  let volume = 1     // the listener's volume, 0..1 -- the master bus
   let level = 0
 
   return {
@@ -157,7 +158,7 @@ export function createSound() {
       if (!ctx) {
         ctx = new AC()
         master = ctx.createGain()
-        master.gain.value = muted ? 0 : 1
+        master.gain.value = muted ? 0 : volume
         master.connect(ctx.destination)
         staticGain = buildStatic(ctx, master)
         staticGain.gain.value = level
@@ -170,9 +171,36 @@ export function createSound() {
       level = v
       if (staticGain) staticGain.gain.setTargetAtTime(v, ctx.currentTime, 0.04)
     },
-    setMuted(m) {
+    /** The master bus follows the listener's mute AND volume: everything
+     *  synthesized -- static, handshake -- sits under the same slider as
+     *  the music. (SIGNAL's #18: its volume keys once moved only the
+     *  player, and the static stayed at full whatever the slider said.) */
+    setOutput(m, v) {
       muted = m
-      if (master) master.gain.setTargetAtTime(m ? 0 : 1, ctx.currentTime, 0.01)
+      volume = Math.min(1, Math.max(0, v))
+      if (master) master.gain.setTargetAtTime(m ? 0 : volume, ctx.currentTime, 0.01)
+    },
+    /** One notch of the volume control: a short dry tick. Straight to the
+     *  speakers, NOT through the master bus -- a detent you cannot hear at
+     *  low volume is no detent (SIGNAL took its own off the bus for the
+     *  same reason). Silent until the set has been powered on once. */
+    detent() {
+      if (!ctx) return
+      const t = ctx.currentTime
+      const src = ctx.createBufferSource()
+      const n = Math.round(ctx.sampleRate * 0.012)
+      const buf = ctx.createBuffer(1, n, ctx.sampleRate)
+      const d = buf.getChannelData(0)
+      for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n) ** 3
+      src.buffer = buf
+      const bp = ctx.createBiquadFilter()
+      bp.type = 'bandpass'
+      bp.frequency.value = 2600
+      bp.Q.value = 1.2
+      const g = ctx.createGain()
+      g.gain.value = 0.18
+      src.connect(bp).connect(g).connect(ctx.destination)
+      src.start(t)
     },
     handshake() {
       if (!ctx) return

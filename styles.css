@@ -111,6 +111,15 @@ main { width: 100%; max-width: 720px; }
 .sep { width: 2px; height: 22px; margin: 0 4px; box-shadow: inset 1px 0 var(--shade), inset -1px 0 var(--chalk); }
 .spacer { flex: 1; }
 
+/* The volume slider: a sunken track with a wedge of fill -- louder is
+   taller, the way the era drew it -- and the same raised thumb as the dial. */
+.volume { position: relative; width: 96px; height: 26px; cursor: pointer; touch-action: none; user-select: none; }
+.volume:focus-visible { outline: 1px dotted var(--ink); outline-offset: 2px; }
+.voltrack { position: absolute; left: 0; right: 0; top: 9px; height: 8px; background: var(--bone); overflow: hidden; }
+.volfill { height: 100%; background: var(--title); clip-path: polygon(0 100%, 100% 0, 100% 100%); }
+.volume.muted .volfill { background: var(--shade); }
+.volthumb { position: absolute; top: 3px; width: 10px; height: 20px; margin-left: -5px; background: var(--putty); box-shadow: var(--raised); }
+
 .tabs { display: flex; padding: 6px 6px 0; margin-bottom: -3px; position: relative; z-index: 1; }
 .tab {
   font: inherit; color: var(--ink-soft); border: 0; background: var(--putty); cursor: pointer;

@@ -31,6 +31,7 @@ const state = {
   lastFreq: {},          // per band, so [B] returns you where you were
   power: false,
   muted: false,
+  volume: mix.DEFAULT_VOLUME,
   station: null,         // the LOCKED station, or null
   track: null,
   bags: new Map(),       // station id -> remaining shuffled track indices
@@ -56,7 +57,7 @@ function restore() {
 }
 function persist() {
   try {
-    localStorage.setItem(STORE_KEY, JSON.stringify({ band: state.band, freq: state.freq, lastFreq: state.lastFreq, muted: state.muted }))
+    localStorage.setItem(STORE_KEY, JSON.stringify({ band: state.band, freq: state.freq, lastFreq: state.lastFreq, muted: state.muted, volume: state.volume }))
   } catch (e) {}
 }
 
@@ -187,11 +188,80 @@ function togglePower() {
 
 function toggleMute() {
   state.muted = !state.muted
-  player?.setMuted(state.muted)
-  sound.setMuted(state.muted)
+  applyOutput()
   announce(state.muted ? 'Muted' : 'Sound on', 'mute')
   persist()
   render()
+}
+
+// ---------------------------------------------------------------- volume
+// The listener's volume reaches two places: the YouTube player (the music)
+// and our master bus (static, handshake). Both go through here and nowhere
+// else -- SIGNAL learned that the hard way twice (see applyMusic).
+
+/** The music's level. The ONE place the player's volume and mute are set.
+ *
+ *  The order is SIGNAL's issue #67, captured from the real IFrame player:
+ *  unMute() refuses to leave the level at zero -- it restores the last
+ *  non-zero volume, or a floor of 5. So: at zero, setVolume(0) AND mute();
+ *  above it, unMute() FIRST, then the level, or unMute() undoes it. And no
+ *  other code path may call unMute(), or volume 0 plays at 5.
+ *
+ *  Cached, so the once-a-second render does not hammer the player with the
+ *  level it already has. */
+let lastMusic = null
+function applyMusic(q) {
+  if (!player) return
+  // Off is silence at the player too, not just an empty one: powering on
+  // then goes through the same unMute-first path as any other rise.
+  const eff = state.muted || !state.power ? 0 : mix.effectiveVolume(state.volume, q)
+  if (eff === lastMusic) return
+  lastMusic = eff
+  if (eff <= 0) {
+    player.setVolume(0)
+    player.setMuted(true)
+    return
+  }
+  player.setMuted(false)
+  player.setVolume(eff)
+}
+
+function currentSignal() {
+  return state.power ? dial.signalFor(dial.nearest(state.stations, state.band, state.freq).dist) : 1
+}
+
+/** Mute or volume changed: both outputs follow at once. */
+function applyOutput() {
+  sound.setOutput(state.muted, state.volume / 100)
+  lastMusic = null
+  applyMusic(currentSignal())
+}
+
+function setVolume(v) {
+  const before = state.volume
+  const wasMuted = state.muted
+  state.volume = mix.clampVolume(v)
+  // Touching the volume un-mutes, like a real set -- and says so. (SIGNAL's
+  // 2026-10-12 audit, M2: doing it silently left the screen reader's
+  // "Muted" as the last word on it.)
+  if (state.muted) state.muted = false
+  applyOutput()
+  if (wasMuted) announce('Sound on', 'mute')
+  if (state.volume !== before) sound.detent()
+  flash(`Volume ${state.volume}%`)
+  persist()
+}
+
+const nudgeVolume = (dir) => setVolume(state.volume + dir * mix.VOLUME_STEP)
+
+function drawVolume() {
+  const v = state.volume
+  const s = $('volume')
+  s.setAttribute('aria-valuenow', String(v))
+  s.setAttribute('aria-valuetext', state.muted ? `${v}%, muted` : `${v}%`)
+  $('volThumb').style.left = `${v}%`
+  $('volFill').style.width = `${v}%`
+  s.classList.toggle('muted', state.muted)
 }
 
 // ---------------------------------------------------------------- dialogs
@@ -494,11 +564,12 @@ function render() {
   // The mix reads the same q as every readout below (mix.js). Off is
   // silence: q is 0 there, which would otherwise mean full static.
   sound.setStatic(state.power ? mix.staticLevel(q) : 0)
-  player?.setVolume(mix.musicVolume(q))
+  applyMusic(q)
 
   $('title').textContent = s ? `SIGNAL-95 — ${s.callsign}` : 'SIGNAL-95'
   $('power').setAttribute('aria-pressed', String(state.power))
   $('mute').setAttribute('aria-pressed', String(state.muted))
+  drawVolume()
   $('scan').setAttribute('aria-pressed', String(!!state.scanTimer))
   for (const b of $('presets').children) b.setAttribute('aria-pressed', String(b.dataset.id === s?.id))
   for (const m of $('marks').children) m.classList.toggle('on', m.dataset.id === s?.id)
@@ -572,6 +643,34 @@ function wireMouse() {
   $('guideTune').addEventListener('click', guideTune)
   $('guideClose').addEventListener('click', () => closeModal())
 
+  // The volume slider: press anywhere on it, drag, or wheel. Its own keys
+  // (arrows, Home/End, PageUp/Down) work while it has focus, and stop
+  // there -- arrows elsewhere tune, so they must not also reach onKey.
+  const vol = $('volume')
+  const volAt = (e) => {
+    const r = vol.getBoundingClientRect()
+    setVolume(((e.clientX - r.left) / r.width) * 100)
+  }
+  vol.addEventListener('pointerdown', (e) => { vol.setPointerCapture(e.pointerId); vol.focus(); volAt(e) })
+  vol.addEventListener('pointermove', (e) => { if (vol.hasPointerCapture(e.pointerId)) volAt(e) })
+  vol.addEventListener('wheel', (e) => {
+    e.preventDefault()
+    nudgeVolume(-Math.sign(e.deltaY || -e.deltaX))
+  }, { passive: false })
+  vol.addEventListener('keydown', (e) => {
+    if (e.altKey || e.ctrlKey || e.metaKey) return
+    const k = e.key
+    if (k === 'ArrowRight' || k === 'ArrowUp') nudgeVolume(1)
+    else if (k === 'ArrowLeft' || k === 'ArrowDown') nudgeVolume(-1)
+    else if (k === 'PageUp') setVolume(state.volume + 25)
+    else if (k === 'PageDown') setVolume(state.volume - 25)
+    else if (k === 'Home') setVolume(0)
+    else if (k === 'End') setVolume(100)
+    else return
+    e.preventDefault()
+    e.stopPropagation()
+  })
+
   // The dial: press anywhere to tune there, drag to sweep, wheel to nudge.
   const d = $('dial')
   const tuneAt = (e) => {
@@ -606,6 +705,8 @@ function onKey(e) {
   else if (k === 's' || k === 'S') toggleScan()
   else if (k === 'b' || k === 'B') setBand(state.band === 'ym' ? 'zm' : 'ym')
   else if (k === 'g' || k === 'G') openGuide()
+  else if (k === '=' || k === '+') nudgeVolume(1)
+  else if (k === '-' || k === '_') nudgeVolume(-1)
   else return
   e.preventDefault()
 }
@@ -622,6 +723,9 @@ function menus() {
       id: 'station', label: '&Station',
       items: () => [
         { label: '&Power', shortcut: 'P', type: 'check', checked: state.power, action: togglePower },
+        { separator: true },
+        { label: 'Volume &Up', shortcut: '+', action: () => nudgeVolume(1) },
+        { label: 'Volume &Down', shortcut: '−', action: () => nudgeVolume(-1) },
         { label: '&Mute', shortcut: 'M', type: 'check', checked: state.muted, action: toggleMute },
       ],
     },
@@ -690,8 +794,12 @@ export async function start() {
     state.band = dial.bandFor(saved.band).key
     state.lastFreq = saved.lastFreq ?? {}
     state.muted = !!saved.muted
-    sound.setMuted(state.muted)
+    if (typeof saved.volume === 'number') state.volume = mix.clampVolume(saved.volume)
   }
+  // The bus's level before anything can sound: without this the static
+  // would play at full until the YouTube player finished loading (or, with
+  // YouTube unreachable, forever).
+  applyOutput()
   wireMouse()
   // A scan keeps running under an open menu: the Scan item's check mark
   // reads the state when the menu opened, and stopping it here would make
@@ -714,8 +822,7 @@ export async function start() {
     onEnded: () => { if (state.station) play(nextTrack(state.station)) },
     onError: () => { if (state.power && state.station) openLost() },
   })
-  player.setMuted(state.muted)
-  player.setVolume(mix.musicVolume(state.power ? dial.signalFor(dial.nearest(state.stations, state.band, state.freq).dist) : 1))
+  applyOutput()
   // Powered on and locked before the API finished loading: play() kept the
   // track but had no player to hand it to.
   if (state.power && state.track) startTrack(state.track, state.trackStart)

@@ -220,6 +220,33 @@ Known soft spot: a stale CUED that arrives after the next cue but before
 its video is ready may read a duration of 0 and start that track at the
 top -- a missed join, never a wrong station.
 
+### Volume (2026-10-13)
+
+A slider beside the speaker button (press, drag, wheel; arrows, Home/End
+and PageUp/Down while it has focus), `−`/`+` anywhere, and Station →
+Volume Up/Down. Default 70, step 10 -- SIGNAL's. Three rules, all of
+them SIGNAL's lessons:
+
+- **One function sets the player** (`applyMusic`): level = the listener's
+  volume × the dial's music share (`mix.effectiveVolume`), so the slider
+  and the dial multiply instead of overwriting each other. At zero it
+  calls `setVolume(0)` *and* `mute()`; above zero `unMute()` first. The
+  real player's `unMute()` will not leave the level at zero -- it restores
+  the last non-zero level, or 5 -- so **no other code may call
+  `unMute()`**, or volume 0 plays at 5 (SIGNAL's issue #67). The fake
+  player in the drive models that quirk; "+ from 0 gives 10, not 5" is the
+  check.
+- **The volume reaches the synthesized side too**: `sound.setOutput()`
+  puts the static and the handshake under the same slider (SIGNAL's #18).
+  The detent tick goes straight to the speakers, off the bus, so you can
+  hear the notches at low volume.
+- **Touching the volume un-mutes, and announces "Sound on"** (SIGNAL's
+  2026-10-12 audit, M2).
+
+The player sits at 0 while the set is off, so power-on goes through the
+same unmute-first path as any other rise. The slider handles its own keys
+and stops them there; arrows anywhere else tune.
+
 ### Station schemes (2026-10-13)
 
 All sixteen public stations have one (`schemes.js`): an invented name, a
@@ -297,7 +324,7 @@ and deleting the dot rule were both checked to turn the suite red.
 
 ## Not built yet
 
-The right-click preset menu, volume control, station IDs, lyrics,
+The right-click preset menu, station IDs, lyrics,
 weather, the secret stations (handed over by `roster.js` as
 `secretStations`, not on the dial -- they must stay generic on
 `station.secret`, as in SIGNAL), persistence beyond band/frequency/mute,

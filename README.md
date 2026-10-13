@@ -22,6 +22,7 @@ Everything works with the mouse, and everything has a key.
 | Preset buttons | `1–9` | Tune a preset on this band |
 | Band tabs | `B` | Switch between YM and ZM |
 | Scan | `S` | Visit each station in turn |
+| Volume slider (press, drag or wheel) | `−` `+` | Volume down / up |
 | Speaker button | `M` | Mute |
 | Guide → Station Guide | `G` | Browse the stations and their playlists |
 | Menu bar | `Alt+letter` `F10` | Open a menu (arrows move, Enter chooses, Esc closes) |

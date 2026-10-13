@@ -93,3 +93,17 @@ test('the mix: static and music cross-fade on the one signal value', async () =>
   // arrive under a wall of noise.
   assert.ok(mix.staticLevel(dial.LOCK_SIGNAL) < mix.STATIC_MAX * 0.1)
 })
+
+test('volume: the listener\'s level scales the music, never overrides the dial', async () => {
+  const mix = await import('../mix.js')
+  assert.equal(mix.effectiveVolume(0, 1), 0)
+  assert.equal(mix.effectiveVolume(100, 1), 100)
+  assert.equal(mix.effectiveVolume(mix.DEFAULT_VOLUME, 1), 70)
+  assert.equal(mix.effectiveVolume(100, dial.LOCK_SIGNAL), 70, 'lock edge still pulls it down')
+  assert.equal(mix.effectiveVolume(50, dial.LOCK_SIGNAL), 35, 'the two multiply')
+  assert.equal(mix.clampVolume(140), 100)
+  assert.equal(mix.clampVolume(-3), 0)
+  for (let v = 0; v <= 100; v += 10) {
+    assert.ok(mix.effectiveVolume(v, 1) >= mix.effectiveVolume(v - 10, 1), `louder at ${v}`)
+  }
+})
