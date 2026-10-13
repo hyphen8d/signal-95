@@ -84,7 +84,14 @@ without asking.
 -> `app.js`, which imports its siblings with the same `?v=` (module
 identity, as in SIGNAL: one instance per full URL).
 
-- `app.js` -- state, input (mouse and keys), drawing. One window.
+- `app.js` -- state, input (mouse and keys), drawing, the menus' contents
+  and the dialogs. One window.
+- `menus.js` -- the menu bar as a generic component (2026-10-12). Its
+  navigation helpers (`parseLabel`, `nextIndex`, `codeChar`,
+  `accelIndex`) are pure and tested; the DOM half is verified by driving.
+- `controls.js` -- every control said once: the Keyboard Shortcuts dialog
+  renders it, and `tests/menus.test.mjs` fails unless README's Controls
+  table is exactly `readmeRow()` of it. Add a key there first.
 - `dial.js` -- pure: bands, thresholds, nearest/seek, and `signalFor()`.
 - `schemes.js` -- per-station title-bar and display colours; pure.
 - `roster.js` -- fetches SIGNAL's stamp, imports SIGNAL's stations.js.
@@ -99,6 +106,36 @@ distance itself.
 
 **The display panel is the one place the tube survives** -- dark ground,
 phosphor glow, VT323. It is the visible DNA link to SIGNAL; keep it.
+
+### The menu bar
+
+Station, Tuning, Presets, Guide. The rules that are easy to break:
+
+- **Every item does something** a button or key already does, or opens a
+  dialog. No dead entries, no greyed-out promises of features to come --
+  the dead-feedback rule applied to menus. A feature gets a menu item when
+  it exists.
+- **Items are built when the menu opens**, from a function, so check marks
+  read the state of that moment. Corollary: nothing may change state
+  *because* a menu opened -- stopping a scan on open was tried and would
+  have drawn a Scan check mark that was already false.
+- **Key routing is ordered**: an open dialog, then the menu bar, then the
+  radio (`onKey` in app.js). An open menu owns the keyboard and swallows
+  every key, so `P` cannot power the set off from under it.
+- **Accelerators match on `e.code`**, not `e.key`: Option+S on a Mac types
+  `ß`. Alt+letter is the way in; F10 opens the first menu. Alt+S and
+  Alt+T are Firefox's own History and Tools menus -- the handler calls
+  `preventDefault`, which should win, but that is **unverified in
+  Firefox** (only Chromium has been driven).
+- **Presets lists both bands**, the current one first. Only the current
+  band's stations carry numbers, because 1-9 mean that band's presets on
+  the keyboard and two "1"s would collide; choosing a station on the other
+  band switches band.
+
+Dialogs (Signal Lost, About, Keyboard Shortcuts) share one modal: it
+holds focus (Tab cycles, Esc does the dialog's escape action) and gives
+focus back on close. The scheme's CSS variables are set on the document
+root, not the window, so menus and dialogs wear the station's colours.
 
 ### The dev server mounts two repos
 
@@ -142,9 +179,20 @@ and deleting the dot rule were both checked to turn the suite red.
 - **The Signal Lost dialog holds focus.** The first version let focus sit
   on the body behind a modal, leaving the keyboard nothing it could press.
 
+- **The dialog layer needs its own z-index.** The band tabs are lifted
+  (z-index 1) to overlap the dial panel and drew straight through the
+  first Keyboard Shortcuts dialog.
+- **Pixelify Sans's `fi` ligature is broken** -- "fine" rendered as
+  "Ane". Ligatures are off on `body`; `font: inherit` carries that to
+  every control.
+- **Driving it over CDP:** an `Input.dispatchKeyEvent` for Enter needs
+  `text: '\r'` or the browser never turns it into a button click -- the
+  first drive reported "Enter on OK does nothing", which was the harness.
+  Alt+letter needs `modifiers: 1` and the right `code`.
+
 ## Not built yet
 
-The menu bar (with Alt accelerators), the station guide window, the
+The station guide window, the
 right-click preset menu, volume control, static/handshake audio between
 stations, station IDs, lyrics, weather, the secret stations (handed over
 by `roster.js` as `secretStations`, not on the dial -- they must stay

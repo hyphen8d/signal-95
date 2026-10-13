@@ -12,6 +12,8 @@ const dial = await import(`./dial.js?v=${V}`)
 const { schemeFor } = await import(`./schemes.js?v=${V}`)
 const { loadRoster } = await import(`./roster.js?v=${V}`)
 const { createPlayer } = await import(`./player.js?v=${V}`)
+const { createMenuBar } = await import(`./menus.js?v=${V}`)
+const { CONTROLS } = await import(`./controls.js?v=${V}`)
 
 const SCAN_DWELL_MS = 6000
 const FLASH_MS = 1600
@@ -32,10 +34,12 @@ const state = {
   scanTimer: 0,
   flash: '',
   flashUntil: 0,
-  lostOpen: false,
+  rosterStamp: '',
 }
 
 let player = null
+let menuBar = null
+let modal = null       // { el, onEscape, returnTo } while a dialog is up
 
 // ---------------------------------------------------------------- storage
 // Per-viewer convenience only: band, frequency, mute. Every access is
@@ -149,20 +153,76 @@ function toggleMute() {
   render()
 }
 
-// ---------------------------------------------------------------- Signal Lost
+// ---------------------------------------------------------------- dialogs
+// One modal at a time, and it holds focus: Tab cycles its buttons and
+// links, Escape does its `onEscape`, and focus goes back where it came from
+// on close. A modal that let focus sit on the body behind it (the first
+// Signal Lost did, found driving it headlessly) leaves the keyboard with
+// nothing it can press.
 
-function openLost() {
-  state.lostOpen = true
-  stopScan()
-  $('lostLine').textContent = `The station stopped answering partway through “${state.track?.title ?? 'this track'}”.`
-  $('lost').hidden = false
-  $('lostNext').focus()
+const focusables = (el) => [...el.querySelectorAll('button, a[href]')].filter((f) => !f.disabled)
+
+function openModal(id, onEscape) {
+  if (modal) closeModal({ restore: false })
+  menuBar?.close()
+  const el = $(id)
+  el.hidden = false
+  modal = { el, onEscape, returnTo: document.activeElement }
+  ;(el.querySelector('.def') ?? focusables(el)[0])?.focus()
 }
 
-function closeLost() {
-  state.lostOpen = false
-  $('lost').hidden = true
-  $('power').focus()
+function closeModal({ restore = true } = {}) {
+  if (!modal) return
+  modal.el.hidden = true
+  const back = modal.returnTo
+  modal = null
+  if (restore) (back && back.isConnected && back !== document.body ? back : $('power')).focus()
+}
+
+function modalKey(e) {
+  const f = focusables(modal.el)
+  if (e.key === 'Escape') { e.preventDefault(); modal.onEscape() }
+  else if (e.key === 'Tab') {
+    e.preventDefault()
+    const i = f.indexOf(document.activeElement)
+    f[(i + (e.shiftKey ? f.length - 1 : 1)) % f.length].focus()
+  } else if (!f.includes(document.activeElement)) {
+    e.preventDefault()
+    f[0].focus()
+  }
+}
+
+function openLost() {
+  stopScan()
+  $('lostLine').textContent = `The station stopped answering partway through “${state.track?.title ?? 'this track'}”.`
+  openModal('lost', () => $('lostNext').click())
+}
+
+function openAbout() {
+  $('aboutBuild').textContent = globalThis.SIGNAL95_BUILD ?? ''
+  $('aboutCount').textContent = String(state.stations.length)
+  $('aboutRoster').textContent = state.rosterStamp
+  openModal('about', closeModal)
+}
+
+function openKeys() {
+  const body = $('keysBody')
+  if (!body.children.length) {
+    for (const c of CONTROLS) {
+      const tr = document.createElement('tr')
+      const keys = document.createElement('td')
+      for (const k of c.keys) {
+        const kbd = document.createElement('kbd')
+        kbd.textContent = k
+        keys.append(kbd, ' ')
+      }
+      if (c.note) keys.append(Object.assign(document.createElement('span'), { className: 'soft', textContent: c.note }))
+      tr.append(Object.assign(document.createElement('td'), { textContent: c.does }), keys,
+        Object.assign(document.createElement('td'), { textContent: c.mouse }))
+      body.append(tr)
+    }
+  }
+  openModal('keys', closeModal)
 }
 
 // ---------------------------------------------------------------- feedback
@@ -259,10 +319,12 @@ function render() {
   const q = state.power ? dial.signalFor(dist) : 0
   const s = state.station
   const scheme = schemeFor(s?.id)
-  const tuner = $('tuner')
-  tuner.style.setProperty('--title', scheme.title)
-  tuner.style.setProperty('--led', scheme.led)
-  tuner.style.setProperty('--signal', String(q))
+  // On the root, not #tuner: the menus and dialogs wear the station's
+  // scheme too, and the dialogs live outside the window.
+  const root = document.documentElement
+  root.style.setProperty('--title', scheme.title)
+  root.style.setProperty('--led', scheme.led)
+  root.style.setProperty('--signal', String(q))
 
   $('title').textContent = s ? `SIGNAL-95 — ${s.callsign}` : 'SIGNAL-95'
   $('power').setAttribute('aria-pressed', String(state.power))
@@ -331,8 +393,10 @@ function wireMouse() {
   $('seekUp').addEventListener('click', () => seek(1))
   $('seekDown').addEventListener('click', () => seek(-1))
   for (const t of document.querySelectorAll('.tab')) t.addEventListener('click', () => setBand(t.dataset.band))
-  $('lostNext').addEventListener('click', () => { closeLost(); if (state.station) play(nextTrack(state.station)) })
-  $('lostRetry').addEventListener('click', () => { closeLost(); if (state.track) play(state.track) })
+  $('lostNext').addEventListener('click', () => { closeModal(); if (state.station) play(nextTrack(state.station)) })
+  $('lostRetry').addEventListener('click', () => { closeModal(); if (state.track) play(state.track) })
+  $('aboutOk').addEventListener('click', () => closeModal())
+  $('keysOk').addEventListener('click', () => closeModal())
 
   // The dial: press anywhere to tune there, drag to sweep, wheel to nudge.
   const d = $('dial')
@@ -348,27 +412,14 @@ function wireMouse() {
   }, { passive: false })
 }
 
-// Keys mirror the mouse one for one. Alt is left alone on purpose: it is
-// reserved for the menu bar's accelerators when that lands.
+// Keys mirror the mouse one for one. Who gets a key, in order: an open
+// dialog, then the menu bar (which owns the keyboard while a menu is open,
+// and answers Alt+letter and F10 when none is), then the radio. Alt
+// belongs to the menu bar, so the radio's own keys ignore it.
 function onKey(e) {
+  if (modal) { modalKey(e); return }
+  if (menuBar?.handleKey(e)) return
   if (e.ctrlKey || e.metaKey || e.altKey) return
-  // The dialog is modal, so it holds focus: Tab cycles its two buttons, and
-  // Escape is Next Track. A modal that let focus sit on the body behind it
-  // (the first cut did, found driving it headlessly) leaves the keyboard
-  // with nothing it can press.
-  if (state.lostOpen) {
-    const btns = [$('lostNext'), $('lostRetry')]
-    if (e.key === 'Escape') { e.preventDefault(); $('lostNext').click() }
-    else if (e.key === 'Tab') {
-      e.preventDefault()
-      const i = btns.indexOf(document.activeElement)
-      btns[(i + (e.shiftKey ? btns.length - 1 : 1)) % btns.length].focus()
-    } else if (!btns.includes(document.activeElement)) {
-      e.preventDefault()
-      btns[0].focus()
-    }
-    return
-  }
   const k = e.key
   const fine = e.shiftKey ? 0.1 : 1
   if (k === 'ArrowRight') tune(state.freq + fine)
@@ -384,11 +435,80 @@ function onKey(e) {
   e.preventDefault()
 }
 
+// ---------------------------------------------------------------- menus
+// Every item does something a button or key already does, or opens a
+// dialog -- there are no dead entries. Items are built at open time
+// (menus.js), so the check marks are always the state of that moment.
+
+function menus() {
+  const band = () => dial.bandFor(state.band)
+  return [
+    {
+      id: 'station', label: '&Station',
+      items: () => [
+        { label: '&Power', shortcut: 'P', type: 'check', checked: state.power, action: togglePower },
+        { label: '&Mute', shortcut: 'M', type: 'check', checked: state.muted, action: toggleMute },
+      ],
+    },
+    {
+      id: 'tuning', label: '&Tuning',
+      items: () => [
+        { label: 'Seek &Up', shortcut: '↑', action: () => seek(1) },
+        { label: 'Seek &Down', shortcut: '↓', action: () => seek(-1) },
+        { label: '&Scan', shortcut: 'S', type: 'check', checked: !!state.scanTimer, action: toggleScan },
+        { separator: true },
+        ...dial.BANDS.map((b) => ({
+          label: `&${b.label} Band`, shortcut: 'B', type: 'radio', checked: b.key === state.band,
+          action: () => setBand(b.key),
+        })),
+      ],
+    },
+    {
+      // Both bands' stations, the current band first. Only the current
+      // band's carry a number: 1-9 are that band's presets, here as on the
+      // keyboard, and the other band's would collide with them. Choosing
+      // one on the other band switches band and tunes it.
+      id: 'presets', label: '&Presets',
+      items: () => {
+        const cur = band().key
+        const order = [cur, ...dial.BANDS.map((b) => b.key).filter((k) => k !== cur)]
+        return order.flatMap((key, bi) => [
+          ...(bi ? [{ separator: true }] : []),
+          { heading: `${dial.bandFor(key).label} Band` },
+          ...dial.stationsOn(state.stations, key).map((s, i) => ({
+            label: key === cur && i < 9 ? `&${i + 1}  ${s.callsign}` : s.callsign,
+            shortcut: s.freq.toFixed(1),
+            type: 'radio',
+            checked: s === state.station,
+            action: () => tuneStation(s),
+          })),
+        ])
+      },
+    },
+    {
+      id: 'guide', label: '&Guide',
+      items: () => [
+        { label: '&Keyboard Shortcuts…', action: openKeys },
+        { separator: true },
+        { label: '&About SIGNAL-95…', action: openAbout },
+      ],
+    },
+  ]
+}
+
+/** Tune a station by object, switching band if it is on the other one. */
+function tuneStation(s) {
+  if (s === state.station) { flash(`Already on ${s.callsign}`); return }
+  if (s.band !== state.band) state.band = s.band
+  tune(s.freq)
+}
+
 // ---------------------------------------------------------------- boot
 
 export async function start() {
   const roster = await loadRoster()
   state.stations = roster.stations
+  state.rosterStamp = roster.stamp
   const saved = restore()
   if (saved) {
     state.band = dial.bandFor(saved.band).key
@@ -396,6 +516,10 @@ export async function start() {
     state.muted = !!saved.muted
   }
   wireMouse()
+  // A scan keeps running under an open menu: the Scan item's check mark
+  // reads the state when the menu opened, and stopping it here would make
+  // that mark wrong the moment it was drawn.
+  menuBar = createMenuBar($('menubar'), menus())
   document.addEventListener('keydown', onKey)
   new ResizeObserver(() => { if (state.builtBand) placeMarks() }).observe($('dial'))
   // Webfonts change label widths; measure again once they are in.

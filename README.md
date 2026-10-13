@@ -16,13 +16,14 @@ Everything works with the mouse, and everything has a key.
 | Mouse | Key | Does |
 |---|---|---|
 | Power button, top right | `P` | Power on / off |
-| Click or drag the dial | `←` `→` (`Shift` for fine) | Tune |
-| Mouse wheel over the dial | | Nudge the tuning (`Shift` for fine) |
+| Click or drag the dial | `←` `→` (Shift for fine) | Tune |
+| Mouse wheel over the dial | (Shift for fine) | Nudge the tuning |
 | Seek buttons | `↑` `↓` | Jump to the next / previous station |
-| Preset buttons | `1`–`9` | Tune a preset on this band |
+| Preset buttons | `1–9` | Tune a preset on this band |
 | Band tabs | `B` | Switch between YM and ZM |
 | Scan | `S` | Visit each station in turn |
 | Speaker button | `M` | Mute |
+| Menu bar | `Alt+letter` `F10` | Open a menu (arrows move, Enter chooses, Esc closes) |
 
 ## Running it locally
 
