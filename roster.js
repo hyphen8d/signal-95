@@ -30,15 +30,30 @@ async function signalStamp() {
   return String(Date.now())
 }
 
-/** Resolves to { stations, secretStations, stamp }. `stations` is the public
- *  roster across both bands; secret stations are handed over separately
- *  and are not on the dial (see CLAUDE.md -- they are not wired up yet). */
+/** Resolves to { stations, secretStations, stamp, idClipUrl }. `stations`
+ *  is the public roster across both bands; secret stations are handed over
+ *  separately and are not on the dial (see CLAUDE.md).
+ *
+ *  idClipUrl(stationId) is where that station's spoken ID lives -- SIGNAL's
+ *  own clip, named by SIGNAL's own map (audio/station-id-clips.js), because
+ *  a callsign can change while an id cannot and the map is how SIGNAL
+ *  keeps the two straight: SYNAPSE's id is still 'midnight-neon'. Deriving
+ *  the name here instead is exactly the bug that map was written to end.
+ *  Stamped with SIGNAL's build, as SIGNAL stamps its own clips (a re-render
+ *  is byte-different behind an unchanged URL). Null when the map cannot be
+ *  loaded: the set simply has no spoken IDs, it does not fail to boot. */
 export async function loadRoster() {
   const stamp = await signalStamp()
   const mod = await import(`${SIGNAL_ROOT}stations.js?v=${stamp}`)
+  let idClipUrl = null
+  try {
+    const clips = await import(`${SIGNAL_ROOT}audio/station-id-clips.js?v=${stamp}`)
+    idClipUrl = (id) => `${SIGNAL_ROOT}${clips.stationIdClipPath(id)}?v=${stamp}`
+  } catch (e) {}
   return {
     stations: mod.STATIONS.filter((s) => !s.secret),
     secretStations: mod.SECRET_STATIONS ?? [],
     stamp,
+    idClipUrl,
   }
 }

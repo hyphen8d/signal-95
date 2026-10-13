@@ -220,6 +220,38 @@ Known soft spot: a stale CUED that arrives after the next cue but before
 its video is ready may read a duration of 0 and start that track at the
 top -- a missed join, never a wrong station.
 
+### Station IDs (2026-10-13)
+
+On every lock: the handshake, then the station's **ident** -- the same
+four-note motif SIGNAL plays, read from the shared roster (`ident`,
+`identTempo`) -- voiced as an FM jingle (two-operator FM, generic, no
+chip's patch). Then, sometimes, the **spoken ID**: SIGNAL's own clip,
+fetched live from `/signal/audio/` like the roster, and played through a
+dial-up codec (sample-and-hold to 8kHz, 7 bits, the 300-3400Hz line)
+where SIGNAL plays it "through the radio". The scripts are the callsign
+alone, so SIGNAL's clips fit this app unedited.
+
+- **"Sometimes" is SIGNAL's 55th-pass rule**: a station's first lock this
+  session, or any time you choose it on purpose (a preset, the guide, a
+  menu -- `tune(..., { deliberate: true })`). Seeking, scanning or
+  dragging back onto it does not repeat the voice.
+- **The clip name comes from SIGNAL's own map** (`audio/station-id-
+  clips.js`, imported by roster.js): SYNAPSE's id is still
+  `midnight-neon`, and deriving names here is the bug that map exists to
+  end. `tests/station-ids.test.mjs` checks every public station has an
+  ident and a clip the dev server will serve -- a missing clip is silent,
+  so only a test can notice it.
+- **The music ducks to half under the voice** -- SIGNAL's constants and
+  stepped ramp (down 160ms, back 520ms), riding inside `applyMusic()` so
+  the duck, the dial and the slider multiply.
+- **Every lock is a new token**: a lost lock, a re-tune or power-off
+  cancels the jingle, the voice, and a voice still loading.
+
+Measured: jingle peaks -23 dBFS; the codec'd voice sits at -26 dBFS RMS,
+level with SIGNAL's clip as shipped. Driven live against a fake player
+(duck 70 -> 35 -> 70; no repeat on a seek back; a pending voice dropped
+by a quick re-tune). **Not yet heard on real speakers.**
+
 ### The preset menu and station links (2026-10-13)
 
 Right-click a preset (or Shift+F10 / the Menu key on a focused one):
@@ -289,8 +321,10 @@ shipping (added to the style board).
 `/signal-95/` is this repo and `/signal/` is SIGNAL's checkout -- the
 exact paths Pages gives them -- so `roster.js`'s relative `../signal/`
 import resolves identically in dev and production. Both mounts are
-**allowlists**: from SIGNAL it serves `stations.js` and `build.json` and
-nothing else, because SIGNAL's repo root holds secrets
+**allowlists**: from SIGNAL it serves `stations.js`, `build.json`, and
+since the station IDs `audio/station-id-clips.js` plus
+`audio/station-id-*.mp3` (a pattern that admits nothing else in audio/ --
+not the liners) -- and nothing else, because SIGNAL's repo root holds secrets
 (`.elevenlabs-key` was once served over HTTP by a server like this one --
 SIGNAL's CLAUDE.md, 2026-09-02). `tests/dev-server.test.mjs` asserts both
 halves -- what must 404 does, what the app fetches still 200s -- and asks
@@ -347,8 +381,7 @@ and deleting the dot rule were both checked to turn the suite red.
 
 ## Not built yet
 
-Station IDs, lyrics,
-weather, the secret stations (handed over by `roster.js` as
+Lyrics, weather, the secret stations (handed over by `roster.js` as
 `secretStations`, not on the dial -- they must stay generic on
 `station.secret`, as in SIGNAL), persistence beyond band/frequency/mute,
 and a DOM test harness.

@@ -27,11 +27,15 @@ test('the rule itself: secrets and tooling resolve to nothing', () => {
     '/etc/passwd', '/signal-95/LICENSE',
     // Only the dot rule stops this one: allowed extension, app root.
     '/signal-95/.secrets.json', '/signal-95/.env.js',
+    // audio/ admits the station IDs and their name map, nothing else.
+    '/signal/audio/liner-cipher-01.mp3', '/signal/audio/voice.js',
+    '/signal/audio/station-id-../../.elevenlabs-key', '/signal/audio/station-id-x.mp3.bak',
   ]) assert.equal(resolvePath(p), null, p)
 })
 
 test('the app and the two shared files resolve', () => {
-  for (const p of ['/signal-95/', '/signal-95/app.js', '/signal-95/styles.css', '/signal-95/build.json', '/signal/stations.js', '/signal/build.json']) {
+  for (const p of ['/signal-95/', '/signal-95/app.js', '/signal-95/styles.css', '/signal-95/build.json', '/signal/stations.js', '/signal/build.json',
+    '/signal/audio/station-id-clips.js', '/signal/audio/station-id-cipher.mp3']) {
     assert.ok(resolvePath(p), p)
   }
 })
@@ -47,6 +51,10 @@ test('over HTTP: the app is served, with no-store', async () => {
 test('over HTTP: SIGNAL hands over its roster and nothing else', { skip: !existsSync(path.join(SIGNAL_DIR, 'stations.js')) && 'no SIGNAL checkout beside this repo' }, async () => {
   assert.equal((await get('/signal/stations.js')).status, 200)
   assert.equal((await get('/signal/build.json')).status, 200)
+  const clip = await get('/signal/audio/station-id-synapse.mp3')
+  assert.equal(clip.status, 200)
+  assert.equal(clip.headers.get('content-type'), 'audio/mpeg')
+  assert.equal((await get('/signal/audio/liner-cipher-01.mp3')).status, 404)
   assert.equal((await get('/signal/index.html')).status, 404)
   assert.equal((await get('/signal/tools/admin-server.mjs')).status, 404)
 })

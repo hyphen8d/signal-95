@@ -37,6 +37,9 @@ const state = {
   bags: new Map(),       // station id -> remaining shuffled track indices
   trackStart: 0,         // how state.track starts: 0, 'join', or seconds
   memory: new Map(),     // station id -> where it was when you left (broadcast.js)
+  announced: new Set(),  // stations whose spoken ID has played this session
+  idClipUrl: null,       // station id -> its spoken-ID clip (roster.js), or null
+  duck: 1,               // the music's share under a spoken ID, 0.5..1
   scanTimer: 0,
   flash: '',
   flashUntil: 0,
@@ -118,9 +121,61 @@ function stopPlayback() {
   if (player) player.stop()
 }
 
+// ---------------------------------------------------------------- station IDs
+// On every lock, the station's ident -- its four-note motif from the shared
+// roster -- as an FM jingle, after the handshake. Then, sometimes, its
+// spoken ID: SIGNAL's own clip, through a dial-up codec (sound.js).
+//
+// "Sometimes" is SIGNAL's 55th-pass rule: the voice plays on a station's
+// FIRST lock this session, or whenever you choose that station on purpose
+// (a preset, the guide, a menu). Landing on it again by seeking, scanning
+// or dragging past does not repeat it -- a radio that announced itself on
+// every brush of the dial would be one you turned off.
+
+function stationId(s, deliberate) {
+  const voice = !!state.idClipUrl && !s.secret && (deliberate || !state.announced.has(s.id))
+  if (voice) state.announced.add(s.id)
+  sound.ident(s.ident, s.identTempo || 1, voice ? state.idClipUrl(s.id) : null, (ms) => duckFor(ms + DUCK_TAIL_MS))
+}
+
+// The duck: the music down to half under a spoken ID, then back. SIGNAL's
+// constants and SIGNAL's shape -- down fast so the voice never fights a
+// full-level track on its first word, back slowly so the music returns
+// underneath rather than snapping. It has to be stepped on a real timer:
+// the music is YouTube's iframe, and setVolume() has no ramp of its own.
+// It rides inside applyMusic(), the one place the player's level is set,
+// so the duck, the dial and the listener's volume multiply.
+const DUCK_LEVEL = 0.5
+const DUCK_IN_MS = 160
+const DUCK_OUT_MS = 520
+const DUCK_TICK_MS = 40
+const DUCK_TAIL_MS = 300
+let duckUntil = 0
+let duckTimer = 0
+
+function duckFor(ms) {
+  duckUntil = Math.max(duckUntil, Date.now() + ms)
+  if (duckTimer) return
+  duckTimer = setInterval(() => {
+    const target = Date.now() < duckUntil ? DUCK_LEVEL : 1
+    const span = target < state.duck ? DUCK_IN_MS : DUCK_OUT_MS
+    const step = (1 - DUCK_LEVEL) * (DUCK_TICK_MS / span)
+    if (state.duck < target) state.duck = Math.min(target, state.duck + step)
+    else if (state.duck > target) state.duck = Math.max(target, state.duck - step)
+    applyMusic(currentSignal())
+    if (target === 1 && state.duck === 1) clearDuck()
+  }, DUCK_TICK_MS)
+}
+
+function clearDuck() {
+  if (duckTimer) { clearInterval(duckTimer); duckTimer = 0 }
+  duckUntil = 0
+  if (state.duck !== 1) { state.duck = 1; applyMusic(currentSignal()) }
+}
+
 // ---------------------------------------------------------------- tuning
 
-function tune(freq, { fromScan = false } = {}) {
+function tune(freq, { fromScan = false, deliberate = false } = {}) {
   if (!fromScan) stopScan()
   state.freq = dial.clampFreq(freq, state.band)
   state.lastFreq[state.band] = state.freq
@@ -131,9 +186,11 @@ function tune(freq, { fromScan = false } = {}) {
     state.station = locked
     if (locked) {
       announce(`${locked.callsign}, ${locked.freq.toFixed(1)}`, 'station')
-      if (state.power) { sound.handshake(); tuneIn(locked) }
+      if (state.power) { sound.handshake(); tuneIn(locked); stationId(locked, deliberate) }
     } else {
       sound.cancelHandshake()
+      sound.cancelIdent()
+      clearDuck()
       stopPlayback()
     }
   }
@@ -158,7 +215,7 @@ function preset(n) {
   const s = dial.stationsOn(state.stations, state.band)[n - 1]
   if (!s) { flash(`No preset ${n} on ${dial.bandFor(state.band).label}`); return }
   if (s === state.station) { flash(`Already on ${s.callsign}`); return }
-  tune(s.freq)
+  tune(s.freq, { deliberate: true })
 }
 
 function toggleScan() {
@@ -181,8 +238,8 @@ function togglePower() {
   state.power = !state.power
   // The power key is a user gesture -- the moment an AudioContext may start.
   if (state.power) sound.start()
-  if (state.power && state.station) { sound.handshake(); tuneIn(state.station) }
-  if (!state.power) { stopScan(); sound.cancelHandshake(); remember(state.station); stopPlayback() }
+  if (state.power && state.station) { sound.handshake(); tuneIn(state.station); stationId(state.station, false) }
+  if (!state.power) { stopScan(); sound.cancelHandshake(); sound.cancelIdent(); clearDuck(); remember(state.station); stopPlayback() }
   announce(state.power ? 'Power on' : 'Power off', 'power')
   render()
 }
@@ -215,7 +272,7 @@ function applyMusic(q) {
   if (!player) return
   // Off is silence at the player too, not just an empty one: powering on
   // then goes through the same unMute-first path as any other rise.
-  const eff = state.muted || !state.power ? 0 : mix.effectiveVolume(state.volume, q)
+  const eff = state.muted || !state.power ? 0 : Math.round(mix.effectiveVolume(state.volume, q) * state.duck)
   if (eff === lastMusic) return
   lastMusic = eff
   if (eff <= 0) {
@@ -853,7 +910,7 @@ function menus() {
 function tuneStation(s) {
   if (s === state.station) { flash(`Already on ${s.callsign}`); return }
   if (s.band !== state.band) state.band = s.band
-  tune(s.freq)
+  tune(s.freq, { deliberate: true })
 }
 
 // ---------------------------------------------------------------- boot
@@ -862,6 +919,7 @@ export async function start() {
   const roster = await loadRoster()
   state.stations = roster.stations
   state.rosterStamp = roster.stamp
+  state.idClipUrl = roster.idClipUrl
   const saved = restore()
   if (saved) {
     state.band = dial.bandFor(saved.band).key

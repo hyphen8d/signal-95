@@ -47,11 +47,16 @@ const TYPES = {
   '.svg': 'image/svg+xml',
   '.ico': 'image/x-icon',
   '.woff2': 'font/woff2',
+  '.mp3': 'audio/mpeg',
 }
 
 // What SIGNAL-95 may read out of SIGNAL. Add to this only for a file the
-// app actually fetches, and say so in CLAUDE.md.
-export const SIGNAL_FILES = new Set(['stations.js', 'build.json'])
+// app actually fetches, and say so in CLAUDE.md. 2026-10-13: the spoken
+// station IDs -- SIGNAL's clip-name map, and the station-id clips
+// themselves, matched by a pattern that admits nothing else in audio/
+// (not the liners, not a stray render).
+export const SIGNAL_FILES = new Set(['stations.js', 'build.json', 'audio/station-id-clips.js'])
+const SIGNAL_CLIP = /^audio\/station-id-[a-z0-9-]+\.mp3$/
 
 // This repo: the app's own files at the root, plus assets/. Never a
 // dot-segment, never tools/ or tests/ (nothing the browser needs).
@@ -69,8 +74,9 @@ export function resolvePath(urlPath) {
   const segs = p.split('/').filter(Boolean)
   if (segs.some((s) => s.startsWith('.') || s.includes('\\'))) return null
   if (segs[0] === 'signal') {
-    if (segs.length !== 2 || !SIGNAL_FILES.has(segs[1])) return null
-    return path.join(SIGNAL_DIR, segs[1])
+    const rel = segs.slice(1).join('/')
+    if (!SIGNAL_FILES.has(rel) && !SIGNAL_CLIP.test(rel)) return null
+    return path.join(SIGNAL_DIR, ...segs.slice(1))
   }
   if (segs[0] === 'signal-95') {
     const rest = segs.slice(1)
