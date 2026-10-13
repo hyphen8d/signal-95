@@ -8,20 +8,18 @@
 // where it cannot act -- SIGNAL's dead-feedback rule, carried over.
 
 const V = globalThis.SIGNAL95_BUILD ?? ''
-const dial = await import(`./dial.js?v=${V}`)
-const { schemeFor, SCHEMES } = await import(`./schemes.js?v=${V}`)
-const { loadRoster } = await import(`./roster.js?v=${V}`)
-const { createPlayer } = await import(`./player.js?v=${V}`)
-const { createMenuBar, createContextMenu } = await import(`./menus.js?v=${V}`)
-const { CONTROLS } = await import(`./controls.js?v=${V}`)
-const mix = await import(`./mix.js?v=${V}`)
-const broadcast = await import(`./broadcast.js?v=${V}`)
-const { createSound } = await import(`./sound.js?v=${V}`)
-const { createLyrics, instrumentalIdSet, lyricLine } = await import(`./lyrics.js?v=${V}`)
-const W = await import(`./weather.js?v=${V}`)
-const liners = await import(`./liners.js?v=${V}`)
-const SV = await import(`./screensaver.js?v=${V}`)
-const { ENGINE_FACTORIES } = await import(`./saver-engines.js?v=${V}`)
+// All at once, not one after another (2026-10-13). Fourteen sequential
+// `await import`s were a fourteen-step waterfall -- on a cold load of the
+// live site, 7 of the 12 seconds before the set answered a single key. The
+// URLs are unchanged (same `?v=`), so module identity is too.
+const [dial, schemes, { loadRoster }, { createPlayer }, menusMod, { CONTROLS }, mix, broadcast,
+  { createSound }, lyricsMod, W, liners, SV, { ENGINE_FACTORIES }] = await Promise.all(
+  ['dial', 'schemes', 'roster', 'player', 'menus', 'controls', 'mix', 'broadcast',
+    'sound', 'lyrics', 'weather', 'liners', 'screensaver', 'saver-engines']
+    .map((m) => import(`./${m}.js?v=${V}`)))
+const { schemeFor, SCHEMES } = schemes
+const { createMenuBar, createContextMenu } = menusMod
+const { createLyrics, instrumentalIdSet, lyricLine } = lyricsMod
 
 const SCAN_DWELL_MS = 6000
 const FLASH_MS = 1600
@@ -156,6 +154,15 @@ const reducedMotion = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)'
 const saver = { active: false, engine: null, raf: 0, last: 0, t0: 0, startedAt: 0, stationId: undefined, from: null, box: null }
 let lastInputAt = Date.now()
 const SAVER_GRACE_MS = 300 // the key or click that started it must not end it
+// Mouse movement is judged more gently, and this is the bug the first cut
+// shipped (2026-10-13, reported: "I can't get it to work with V or the
+// menu"): it ended on any 8px of movement after 300ms, and a hand resting
+// on a mouse or trackpad drifts that much in the half-second after a click
+// or a keypress -- so the screensaver opened and closed before anyone saw
+// it. Now, for the first SETTLE_MS, movement only moves the reference
+// point; after that it takes WAKE_PX of real movement to end it.
+const SETTLE_MS = 1500
+const WAKE_PX = 24
 
 function sizeSaver() {
   const c = $('saver')
@@ -256,8 +263,8 @@ function wireSaverInput() {
   // where the hand already was, so it only sets the reference point.
   window.addEventListener('pointermove', (e) => {
     if (!saver.active) { lastInputAt = Date.now(); return }
-    if (!saver.from) { saver.from = [e.clientX, e.clientY]; return }
-    if (Math.hypot(e.clientX - saver.from[0], e.clientY - saver.from[1]) > 8 && Date.now() - saver.startedAt >= SAVER_GRACE_MS) stopSaver()
+    if (!saver.from || Date.now() - saver.startedAt < SETTLE_MS) { saver.from = [e.clientX, e.clientY]; return }
+    if (Math.hypot(e.clientX - saver.from[0], e.clientY - saver.from[1]) > WAKE_PX) stopSaver()
   }, true)
   window.addEventListener('resize', () => { if (saver.active) { sizeSaver(); saver.box = null } })
 }
@@ -1425,7 +1432,9 @@ function tuneStation(s) {
 // ---------------------------------------------------------------- boot
 
 export async function start() {
-  const roster = await loadRoster()
+  // main.js starts this fetch alongside the app's own modules (the other
+  // half of the waterfall: SIGNAL's roster used to wait for all of them).
+  const roster = await (globalThis.SIGNAL95_ROSTER ?? loadRoster())
   state.stations = roster.stations
   state.rosterStamp = roster.stamp
   state.secrets = roster.secretStations

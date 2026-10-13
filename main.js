@@ -21,5 +21,11 @@ async function buildStamp() {
 const stamp = await buildStamp()
 globalThis.SIGNAL95_BUILD = stamp
 
+// SIGNAL's roster is fetched NOW, alongside the app's own modules, rather
+// than after them: it is the largest thing the set loads, and it used to
+// sit at the back of the queue. Same module URL app.js would use, so it is
+// one instance; app.js picks the promise up from SIGNAL95_ROSTER.
+globalThis.SIGNAL95_ROSTER = import(`./roster.js?v=${stamp}`).then((r) => r.loadRoster())
+
 const { start } = await import(`./app.js?v=${stamp}`)
 start()

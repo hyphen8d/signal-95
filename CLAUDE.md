@@ -271,10 +271,19 @@ rules that make that true are the ones to keep:
   a set that is on and tuned, and any dialog that opens (Signal Lost)
   takes it down first (`openModal` -> `stopSaver`).
 - **Waking changes nothing.** Any key, click, wheel, touch or a real
-  mouse move (>8px from where the hand was) ends it; the waking input is
+  mouse move ends it; the waking input is
   swallowed (capture-phase listener, `stopImmediatePropagation`), so the
   P that wakes it cannot also switch the set off. A 300ms grace keeps the
   key or click that started it from ending it.
+- **"A real mouse move" is gentle on purpose -- the first cut's bug.** It
+  shipped ending on any 8px after 300ms, and a hand resting on a mouse or
+  trackpad drifts that much in the half-second after a click or a key:
+  reported as "I can't get it to work with V or the menu", because it
+  opened and closed before anyone saw it. The headless drives had passed
+  because a synthetic mouse holds perfectly still. Now movement during the
+  first 1.5s (`SETTLE_MS`) only moves the reference point, and waking
+  takes 24px (`WAKE_PX`) after that. The probe that found it imitates a
+  drifting hand; keep one like it for anything mouse-shaped.
 - **A setting** (View -> Screensaver After Idle), saved; it defaults on,
   and OFF for `prefers-reduced-motion`, where every engine also runs at a
   quarter speed and the now-playing box holds still.
@@ -505,6 +514,18 @@ environment, not a dead roster.
 
 Mutate to check a test can fail (SIGNAL's rule): breaking the band copy
 and deleting the dot rule were both checked to turn the suite red.
+
+## Load order (2026-10-13)
+
+`main.js` starts fetching SIGNAL's roster at once, in parallel with the
+app's own modules, and `app.js` imports its fourteen siblings with one
+`Promise.all`. Both were waterfalls: sequential `await import`s, then the
+roster (SIGNAL's stations.js, ~73 KB gzipped, the largest thing loaded)
+only after all of them. Measured on a cold load of the live site: **12.3s
+before the set answered a key**, found while debugging the screensaver
+(the first probe pressed V before the app was listening). Keep imports
+parallel; a new module goes into the list, not onto a new line of its own
+`await`.
 
 ## Things learned building it
 
