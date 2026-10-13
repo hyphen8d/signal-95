@@ -48,6 +48,8 @@ const TYPES = {
   '.ico': 'image/x-icon',
   '.woff2': 'font/woff2',
   '.mp3': 'audio/mpeg',
+  '.webmanifest': 'application/manifest+json',
+  '.jpg': 'image/jpeg',
 }
 
 // What SIGNAL-95 may read out of SIGNAL. Add to this only for a file the
@@ -63,8 +65,8 @@ const SIGNAL_CLIP = /^audio\/(station-id-[a-z0-9-]+|liner-[a-z0-9-]+-\d{2})\.mp3
 
 // This repo: the app's own files at the root, plus assets/. Never a
 // dot-segment, never tools/ or tests/ (nothing the browser needs).
-const APP_EXT = new Set(['.html', '.js', '.css', '.json', '.png', '.jpg', '.svg', '.ico', '.woff2'])
-const APP_DIRS = new Set(['assets'])
+const APP_EXT = new Set(['.html', '.js', '.css', '.json', '.png', '.jpg', '.svg', '.ico', '.woff2', '.webmanifest'])
+const APP_DIRS = new Set(['assets', 'screenshots'])
 const APP_DENY = new Set(['package.json'])
 
 /** URL path -> absolute file path, or null if it is not served. Exported so

@@ -40,7 +40,10 @@ test('accelerators match by key code, so Option+S on a Mac still means S', () =>
 
 test('README carries the controls table exactly as controls.js says', () => {
   const readme = readFileSync(new URL('../README.md', import.meta.url), 'utf8')
-  const rows = readme.split('\n').filter((l) => l.startsWith('| ') && !l.startsWith('| Mouse |'))
+  // Only the Controls section's table: the README has other tables (the
+  // screenshot grid), and this test guards one of them, not the format.
+  const section = readme.split('\n## Controls')[1].split('\n## ')[0]
+  const rows = section.split('\n').filter((l) => l.startsWith('| ') && !l.startsWith('| Mouse |'))
   const want = CONTROLS.map(readmeRow)
   assert.deepEqual(rows, want, `README's Controls table should be:\n${want.join('\n')}`)
 })

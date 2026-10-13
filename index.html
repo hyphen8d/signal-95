@@ -5,9 +5,21 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <!-- The build this markup belongs to. tools/stamp.js writes it beside
      build.json; main.js reloads once if they disagree (a stale cached page). -->
-<meta name="signal95-build" content="2026-10-13.17">
+<meta name="signal95-build" content="2026-10-13.18">
 <title>SIGNAL-95</title>
 <meta name="description" content="SIGNAL-95: an internet-radio tuner in the style of a mid-90s desktop app. Sixteen curated stations across two bands.">
+<!-- The share card. og.jpg is DERIVED from screenshots/hero.png by
+     tools/shoot.mjs, never made by hand (SIGNAL's own card went stale that
+     way). Scrapers need an absolute URL. -->
+<meta property="og:type" content="website">
+<meta property="og:title" content="SIGNAL-95">
+<meta property="og:description" content="An internet-radio tuner in the style of a mid-90s desktop app. Sixteen curated stations across two bands.">
+<meta property="og:url" content="https://hyphen8d.github.io/signal-95/">
+<meta property="og:image" content="https://hyphen8d.github.io/signal-95/screenshots/og.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="The SIGNAL-95 tuner window, tuned to CITY LIGHTS.">
+<meta name="twitter:card" content="summary_large_image">
 <!-- The icon: favicon.svg is the source (16x16 pixel art); the PNG, ICO
      and home-screen icon are rendered from it at whole-number scales, so
      every size keeps square pixels. -->
@@ -15,6 +27,16 @@
 <link rel="icon" href="./favicon.svg" type="image/svg+xml">
 <link rel="icon" href="./favicon-32.png" type="image/png" sizes="32x32">
 <link rel="apple-touch-icon" href="./apple-touch-icon.png">
+<!-- Add to Home Screen as an app (2026-10-13): launched from the home
+     screen it runs standalone -- no browser toolbar, the window and the
+     desk filling the screen, which is what a desktop-style app wants. The
+     manifest's icons come from the same 16px source; the 512 leaves a
+     margin so it survives a maskable crop. -->
+<link rel="manifest" href="./manifest.webmanifest">
+<meta name="theme-color" content="#23443A">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="SIGNAL-95">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;700&family=VT323&display=swap" rel="stylesheet">

@@ -23,3 +23,15 @@ test('favicon.svg is well-formed enough to parse', () => {
   assert.match(svg, /^<svg [^>]*xmlns="http:\/\/www\.w3\.org\/2000\/svg"/)
   assert.match(svg.trim(), /<\/svg>$/)
 })
+
+test('the web manifest parses, and its icons exist and are served', () => {
+  assert.match(html, /<link rel="manifest" href="\.\/manifest\.webmanifest">/)
+  const m = JSON.parse(readFileSync(new URL('../manifest.webmanifest', import.meta.url), 'utf8'))
+  assert.equal(m.display, 'standalone')
+  assert.equal(m.start_url, './', 'a relative start_url keeps the app inside /signal-95/')
+  for (const i of m.icons) {
+    assert.ok(existsSync(new URL(`../${i.src}`, import.meta.url)), `${i.src} missing`)
+    assert.ok(resolvePath(`/signal-95/${i.src}`), `the dev server would refuse ${i.src}`)
+  }
+  assert.ok(resolvePath('/signal-95/manifest.webmanifest'), 'the dev server would refuse the manifest')
+})

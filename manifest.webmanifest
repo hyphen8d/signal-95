@@ -1,0 +1,14 @@
+{
+  "name": "SIGNAL-95",
+  "short_name": "SIGNAL-95",
+  "description": "An internet-radio tuner in the style of a mid-90s desktop app. Sixteen curated stations across two bands.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#5E6B63",
+  "theme_color": "#23443A",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

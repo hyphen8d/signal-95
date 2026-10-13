@@ -8,6 +8,7 @@
     "test": "node --test tests/*.test.mjs",
     "schemes": "node tools/check-schemes.mjs",
     "stamp": "node tools/stamp.js",
-    "drive": "node tools/drive.mjs"
+    "drive": "node tools/drive.mjs",
+    "shoot": "node tools/shoot.mjs"
   }
 }

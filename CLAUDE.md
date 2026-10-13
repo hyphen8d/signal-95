@@ -28,6 +28,7 @@ node tools/check-schemes.mjs   # npm run schemes -- stations still on the house 
 node tools/stamp.js            # npm run stamp -- bump build.json; RUN BEFORE EVERY DEPLOY
 node tools/drive.mjs           # npm run drive -- the browser smoke test, headless Chromium (~45s)
 node tools/drive.mjs --url=https://hyphen8d.github.io/signal-95/   # the same, against the live site
+node tools/shoot.mjs           # npm run shoot -- regenerate screenshots/ and the share card (needs ImageMagick)
 ```
 
 `file://` does not work (module imports, and the roster lives in another
@@ -586,6 +587,22 @@ a dead roster.
 
 Mutate to check a test can fail (SIGNAL's rule): breaking the band copy
 and deleting the dot rule were both checked to turn the suite red.
+
+## Screenshots, the share card, the home screen (2026-10-13)
+
+- `npm run shoot` (`tools/shoot.mjs`) regenerates `screenshots/` by driving
+  the real app with the smoke test's fakes (shared machinery:
+  `tools/lib/browser.mjs`), at 2x. **`og.jpg` is derived from `hero.png`
+  in the same run**, never by hand: SIGNAL's card went stale exactly when
+  it was a manual step. Re-run after changing any screen the README shows.
+  There is deliberately **no lyrics shot**: with the canned lyrics it reads
+  "Line 4", and with real ones it would commit someone's words to the repo.
+- The share card's tags in index.html carry an absolute URL (scrapers need
+  one).
+- `manifest.webmanifest` + the iOS meta tags let "Add to Home Screen" run
+  the app standalone (no browser toolbar). Its icons (`icon-192/512.png`)
+  come from the same 16px source; "any", not "maskable" -- a circular crop
+  at that size clips the radio's corners.
 
 ## On a phone (2026-10-13)
 
