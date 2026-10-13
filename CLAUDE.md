@@ -544,6 +544,10 @@ it off to the left -- new code, old stylesheet, so the overlay had no
 
 So: **always deploy with `npm run stamp`** (it now writes both), and
 anything new the page fetches by a plain URL needs the same treatment.
+The one file that cannot be stamped is `main.js` itself -- it is what
+reads the stamp (SIGNAL has the same bootstrap) -- so a change to it
+reaches a cached visitor up to 10 minutes late, and keeping it small and
+rarely changed is what keeps that harmless.
 
 ## Things learned building it
 
