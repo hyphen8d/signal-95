@@ -26,6 +26,8 @@ node tools/dev-server.mjs      # npm run dev -- http://127.0.0.1:8095/signal-95/
 node --test tests/*.test.mjs   # npm test
 node tools/check-schemes.mjs   # npm run schemes -- stations still on the house scheme
 node tools/stamp.js            # npm run stamp -- bump build.json; RUN BEFORE EVERY DEPLOY
+node tools/drive.mjs           # npm run drive -- the browser smoke test, headless Chromium (~45s)
+node tools/drive.mjs --url=https://hyphen8d.github.io/signal-95/   # the same, against the live site
 ```
 
 `file://` does not work (module imports, and the roster lives in another
@@ -551,14 +553,36 @@ was also caught by a different rule.
 
 ## Tests
 
-`node --test`, zero dependencies. The suite covers the pure modules and
-the dev server. The tests that compare against SIGNAL **skip, loudly,**
-without a SIGNAL checkout beside this one. There is no DOM harness yet:
-the UI was verified by driving headless Chromium over CDP (power, band
-tab, dial click, presets, the dialog) -- that is how the dial-label
-collision and the dialog focus bug below were found. Headless Chrome
-cannot play YouTube, so every load there ends in Signal Lost; that is the
-environment, not a dead roster.
+Two layers, both zero-dependency:
+
+- **`npm test`** (`node --test`): the pure modules, the dev server, and
+  agreement tests that hold every copied rule to SIGNAL's own source. Those
+  **skip, loudly,** without a SIGNAL checkout beside this one.
+- **`npm run drive`** (`tools/drive.mjs`, 2026-10-13): the real app in
+  headless Chromium over CDP, fifteen scenarios, each in a fresh browser
+  context -- boot time, power and the mid-song join, tuning and Lock On,
+  dial labels, menus and dialogs owning the keyboard, the #67 volume rule,
+  the sleep fade, secret stations, the lyric crawl, weather consent, the
+  screensaver (with a DRIFTING hand), the hidden game, the stale-page
+  reload, and the phone toolbar. YouTube, LRCLIB, Open-Meteo, geolocation
+  and the clock are faked in their captured shapes (see the file's header
+  for what that does and does not prove). `--url=` runs it against the
+  live site; `--only=a,b` picks scenarios.
+
+  Every UI bug of the first two days was found by a throwaway script like
+  this one; this is them, kept. **It has been mutation-checked**: breaking
+  the screensaver's wake rule, the stale-page reload, the #67 order, the
+  phone toolbar, the secret-station sweep and the game's record-on-exit
+  each turns exactly its scenario red, with a message naming the bug. Run
+  it before shipping anything UI-shaped. Two of its first fifteen checks
+  failed for harness reasons worth remembering: a volume read while the
+  station ID's duck was down (5 = 10 x 0.5, correct), and a geolocation
+  grant sent to the wrong browser context. And a fixed-time game check was
+  flaky (it sometimes met nothing to shoot); it now plays until it scores.
+
+Headless Chrome cannot play YouTube, which is why the drive fakes it;
+without the fake, every load ends in Signal Lost -- the environment, not
+a dead roster.
 
 Mutate to check a test can fail (SIGNAL's rule): breaking the band copy
 and deleting the dot rule were both checked to turn the suite red.
@@ -647,8 +671,7 @@ rarely changed is what keeps that harmless.
 
 ## Not built yet
 
-A DOM test harness (everything UI-side is verified by driving headless
-Chromium over CDP; the drives live outside the repo), general liners of
+General liners of
 its own (see Liners). Every SIGNAL feature is otherwise here.
 
 Deploy is GitHub Pages from `main` (live since 2026-10-12 at
