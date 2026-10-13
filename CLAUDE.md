@@ -109,6 +109,15 @@ identity, as in SIGNAL: one instance per full URL).
   imports SIGNAL's weather.js and compares tables, buckets and the URL).
 - `sound.js` -- WebAudio: the line-noise bed, the lock handshake, mute.
 - `tools/dev-server.mjs` -- see below.
+- `favicon.svg` -- the icon's source: the title bar's radio as 16x16 pixel
+  art in the app palette. `favicon-32.png`, `favicon.ico` (16/32/48, 32-bit
+  with alpha -- ImageMagick's default wrote a 4-bit ICO that turned the
+  transparent corners white) and `apple-touch-icon.png` (180, opaque on the
+  desk colour, as iOS requires) are rendered from it at whole-number
+  scales with nearest-neighbour, so every size keeps square pixels. Edit
+  the SVG, then re-render all four. The antenna is the mid grey, not ink:
+  ink vanished on a dark tab bar. And no `--` inside its comments -- XML
+  forbids it, and one did break the file (tests/favicon.test.mjs).
 
 **Tuning distance is one shared quantity**, as in SIGNAL: `signalFor()`
 turns distance-to-station into 0..1, and the display's glow, the signal
