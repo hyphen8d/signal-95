@@ -206,7 +206,7 @@ export function codecBuffer(ctx, buf) {
   return out
 }
 
-export function buildVoice(ctx, dest, t0, buffer) {
+export function buildVoice(ctx, dest, t0, buffer, gain = 1) {
   const src = ctx.createBufferSource()
   src.buffer = buffer
   const hp = ctx.createBiquadFilter()
@@ -216,7 +216,7 @@ export function buildVoice(ctx, dest, t0, buffer) {
   lp.type = 'lowpass'
   lp.frequency.value = 3400
   const g = ctx.createGain()
-  g.gain.value = 0.9
+  g.gain.value = 0.9 * gain
   src.connect(hp).connect(lp).connect(g).connect(dest)
   src.start(t0)
   return {
@@ -328,6 +328,21 @@ export function createSound() {
         const t = Math.max(at, ctx.currentTime + 0.02)
         voice = buildVoice(ctx, master, t, buf)
         onVoice?.(Math.round((t - ctx.currentTime + buf.duration) * 1000))
+      })
+    },
+    /** A voice clip on its own -- a liner -- through the same codec as the
+     *  spoken ID, at `gain` of its level. It shares the ID's token, so a
+     *  re-tune or power-off (cancelIdent) drops it whether it is loading or
+     *  playing, and `stillWanted()` is asked once more when the clip is in
+     *  hand: the track may have moved on while it downloaded. */
+    clip(url, gain, onStart, stillWanted = () => true) {
+      if (!ctx || muted) return
+      const token = identToken
+      this.loadClip(url).then((buf) => {
+        if (!buf || token !== identToken || muted || !stillWanted()) return
+        const t = ctx.currentTime + 0.02
+        voice = buildVoice(ctx, master, t, buf, gain)
+        onStart?.(Math.round(buf.duration * 1000))
       })
     },
     /** Lock lost, or power off: stop the jingle and the voice, and drop a

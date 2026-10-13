@@ -46,9 +46,12 @@ export async function loadRoster() {
   const stamp = await signalStamp()
   const mod = await import(`${SIGNAL_ROOT}stations.js?v=${stamp}`)
   let idClipUrl = null
+  let linerClipUrl = null
   try {
     const clips = await import(`${SIGNAL_ROOT}audio/station-id-clips.js?v=${stamp}`)
     idClipUrl = (id) => `${SIGNAL_ROOT}${clips.stationIdClipPath(id)}?v=${stamp}`
+    // The same map names the liners (SYNAPSE's live under 'synapse').
+    linerClipUrl = (id, n) => `${SIGNAL_ROOT}${clips.linerClipPath(id, n)}?v=${stamp}`
   } catch (e) {}
   return {
     stations: mod.STATIONS.filter((s) => !s.secret),
@@ -60,5 +63,6 @@ export async function loadRoster() {
     trackIsInstrumental: mod.trackIsInstrumental ?? null,
     stamp,
     idClipUrl,
+    linerClipUrl,
   }
 }

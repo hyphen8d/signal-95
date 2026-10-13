@@ -27,8 +27,10 @@ test('the rule itself: secrets and tooling resolve to nothing', () => {
     '/etc/passwd', '/signal-95/LICENSE',
     // Only the dot rule stops this one: allowed extension, app root.
     '/signal-95/.secrets.json', '/signal-95/.env.js',
-    // audio/ admits the station IDs and their name map, nothing else.
-    '/signal/audio/liner-cipher-01.mp3', '/signal/audio/voice.js',
+    // audio/ admits the station IDs, the station liners and the name map --
+    // not the general liners (they name SIGNAL), not code, not a stray file.
+    '/signal/audio/oneliner01.mp3', '/signal/audio/thanks02.mp3', '/signal/audio/voice.js',
+    '/signal/audio/liner-cipher-1.mp3', '/signal/audio/dm-test.mp3',
     '/signal/audio/station-id-../../.elevenlabs-key', '/signal/audio/station-id-x.mp3.bak',
   ]) assert.equal(resolvePath(p), null, p)
 })
@@ -54,7 +56,8 @@ test('over HTTP: SIGNAL hands over its roster and nothing else', { skip: !exists
   const clip = await get('/signal/audio/station-id-synapse.mp3')
   assert.equal(clip.status, 200)
   assert.equal(clip.headers.get('content-type'), 'audio/mpeg')
-  assert.equal((await get('/signal/audio/liner-cipher-01.mp3')).status, 404)
+  assert.equal((await get('/signal/audio/liner-cipher-01.mp3')).status, 200)
+  assert.equal((await get('/signal/audio/oneliner01.mp3')).status, 404)
   assert.equal((await get('/signal/index.html')).status, 404)
   assert.equal((await get('/signal/tools/admin-server.mjs')).status, 404)
 })

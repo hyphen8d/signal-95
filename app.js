@@ -19,6 +19,7 @@ const broadcast = await import(`./broadcast.js?v=${V}`)
 const { createSound } = await import(`./sound.js?v=${V}`)
 const { createLyrics, instrumentalIdSet, lyricLine } = await import(`./lyrics.js?v=${V}`)
 const W = await import(`./weather.js?v=${V}`)
+const liners = await import(`./liners.js?v=${V}`)
 
 const SCAN_DWELL_MS = 6000
 const FLASH_MS = 1600
@@ -41,6 +42,8 @@ const state = {
   memory: new Map(),     // station id -> where it was when you left (broadcast.js)
   announced: new Set(),  // stations whose spoken ID has played this session
   idClipUrl: null,       // station id -> its spoken-ID clip (roster.js), or null
+  linerClipUrl: null,    // (station id, n) -> its nth liner (roster.js), or null
+  lastLiner: {},         // station id -> the liner it played last (no repeats)
   secrets: [],           // SIGNAL's secret stations: off the dial, not off the air
   showLyrics: false,     // the display's mode: Now Playing, or the lyric crawl
   weatherConsent: null,  // 'yes' | 'no' | null (never asked) -- the ONLY weather state saved
@@ -111,7 +114,7 @@ function startTrack(track, start) {
 function skipTrack() {
   if (!state.power) { flash('Power is off'); return }
   if (!state.station) { flash('No signal'); return }
-  play(nextTrack(state.station), 0)
+  nextOnStation()
   flash('Next track')
 }
 
@@ -351,6 +354,34 @@ function renderWeather() {
   }
   $('wxTitle').textContent = title
   if (modal?.el === $('weather') && !$('weather').contains(document.activeElement)) acts.querySelector('.def')?.focus()
+}
+
+// ---------------------------------------------------------------- liners
+// A station's voice between its own songs -- every same-station "next
+// track" path rolls for one (a track ending, N, Next Track after a dead
+// upload), never a lock: a lock has its station ID. Rules, rate and the
+// generals left out: liners.js. Then SIGNAL's timing: 2.5s into the new
+// track, re-checked on both sides of the download, ducked like an ID.
+
+function maybeLiner(station, track) {
+  if (!state.linerClipUrl || state.muted || station.secret) return
+  const n = globalThis.SIGNAL95_FORCE_LINER ? liners.pickLiner(station.id, state.lastLiner[station.id], () => 0) : liners.pickLiner(station.id, state.lastLiner[station.id])
+  if (!n) return
+  const same = () => state.power && !state.muted && state.station === station && state.track === track
+  setTimeout(() => {
+    if (!same()) return
+    state.lastLiner[station.id] = n
+    sound.clip(state.linerClipUrl(station.id, n), liners.LINER_GAIN_MULT, (ms) => duckFor(ms + DUCK_TAIL_MS), same)
+  }, liners.LINER_DELAY_MS)
+}
+
+/** The station moving on to its next track: from the top, and maybe a
+ *  liner. One function so every path that does it gets both. */
+function nextOnStation() {
+  if (!state.station) return
+  const track = nextTrack(state.station)
+  play(track, 0)
+  maybeLiner(state.station, track)
 }
 
 // ---------------------------------------------------------------- station IDs
@@ -1015,7 +1046,7 @@ function wireMouse() {
   $('seekUp').addEventListener('click', () => seek(1))
   $('seekDown').addEventListener('click', () => seek(-1))
   for (const t of document.querySelectorAll('.tab')) t.addEventListener('click', () => setBand(t.dataset.band))
-  $('lostNext').addEventListener('click', () => { closeModal(); if (state.station) play(nextTrack(state.station)) })
+  $('lostNext').addEventListener('click', () => { closeModal(); nextOnStation() })
   // Retry re-tunes rather than restarting the song: the broadcast did not
   // wait for the signal to come back.
   $('lostRetry').addEventListener('click', () => { closeModal(); if (state.track) play(state.track, 'join') })
@@ -1272,6 +1303,7 @@ export async function start() {
     : new Set()
   lyrics = createLyrics({ isInstrumental: (t) => wordless.has(t.youtubeId) })
   state.idClipUrl = roster.idClipUrl
+  state.linerClipUrl = roster.linerClipUrl
   const saved = restore()
   if (saved) {
     state.band = dial.bandFor(saved.band).key
@@ -1326,7 +1358,7 @@ export async function start() {
     // (lyrics.js `rankedBy`). A cache hit when nothing changed.
     onPlaying: () => { if (state.showLyrics && state.track) lyrics?.ensure(state.track, player.duration()); render() },
     onBuffering: render,
-    onEnded: () => { if (state.station) play(nextTrack(state.station)) },
+    onEnded: () => nextOnStation(),
     onError: () => { if (state.power && state.station) openLost() },
   })
   applyOutput()

@@ -100,6 +100,7 @@ identity, as in SIGNAL: one instance per full URL).
 - `broadcast.js` -- pure: where in a track you land (join point, resume).
 - `lyrics.js` -- pure: SIGNAL's synced-lyrics logic, ported (agreement
   test reads SIGNAL's voice.js source for the constants and URLs).
+- `liners.js` -- pure: which liner, how often, and why the generals are out.
 - `weather.js` -- pure: SIGNAL's weather data half, ported (agreement test
   imports SIGNAL's weather.js and compares tables, buckets and the URL).
 - `sound.js` -- WebAudio: the line-noise bed, the lock handshake, mute.
@@ -253,6 +254,31 @@ file is the only place the keys are written down, as in SIGNAL.
 `N` / Station -> Next Track (SIGNAL's key): the next track from the top.
 Off-station it says "No signal", powered off "Power is off" -- SIGNAL's
 dead-feedback fix for the same key.
+
+### Liners (2026-10-13)
+
+A station's voice between its own songs -- "Machines don't get lonely, we
+do. COLD WAVE." -- on every same-station next-track path (a track ending,
+`N`, Next Track after a dead upload; `nextOnStation()` is the one place
+that does both), never on a lock. SIGNAL's own clips, named by SIGNAL's
+map, through the same dial-up codec as the IDs, 2.5s into the new track,
+re-checked before and after the download, ducked, never the same clip
+twice running.
+
+- **SIGNAL's general liners are deliberately out.** Every one names
+  SIGNAL ("This is SIGNAL. Try not to overthink it."), and from this app
+  it would name the other radio. Station liners never say "SIGNAL". The
+  dev server's allowlist admits `liner-<name>-NN.mp3` and refuses the
+  generals by construction; `tests/liners.test.mjs` asserts both.
+  Generals of SIGNAL-95's own would be new renders (SIGNAL's
+  `tools/voice-render.mjs`, which costs credits) -- a decision for Matt,
+  not a port.
+- **The rate is SIGNAL's station-liner rate**, 0.35 x 0.5 = 17.5% of track
+  changes, not its 35% overall drop rate: with the generals gone, 35% would
+  play each station's two lines twice as often as SIGNAL does. Derived
+  from SIGNAL's constants in the test, which also checks the per-station
+  counts against SIGNAL's source and that every counted clip exists.
+  RISE UP has none recorded; secret stations are not in the map.
 
 ### Sleep timer (2026-10-13)
 
@@ -481,7 +507,8 @@ and deleting the dot rule were both checked to turn the suite red.
 ## Not built yet
 
 A DOM test harness (everything UI-side is verified by driving headless
-Chromium over CDP; the drives live outside the repo), SIGNAL's liners, and its visualizer and game -- the last two would need
+Chromium over CDP; the drives live outside the repo), general liners of
+its own (see Liners), and its visualizer and game -- the last two would need
 their own thinking about what a 90s desktop app's equivalent is
 (a screensaver was the original idea).
 

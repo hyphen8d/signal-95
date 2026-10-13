@@ -55,8 +55,11 @@ const TYPES = {
 // station IDs -- SIGNAL's clip-name map, and the station-id clips
 // themselves, matched by a pattern that admits nothing else in audio/
 // (not the liners, not a stray render).
+// Same day, later: the station LINERS too (liner-<name>-NN.mp3). Not the
+// general liners (oneliner*, thanks*): every one of those names SIGNAL, so
+// this app never plays them -- and an allowlist is how "never" stays true.
 export const SIGNAL_FILES = new Set(['stations.js', 'build.json', 'audio/station-id-clips.js'])
-const SIGNAL_CLIP = /^audio\/station-id-[a-z0-9-]+\.mp3$/
+const SIGNAL_CLIP = /^audio\/(station-id-[a-z0-9-]+|liner-[a-z0-9-]+-\d{2})\.mp3$/
 
 // This repo: the app's own files at the root, plus assets/. Never a
 // dot-segment, never tools/ or tests/ (nothing the browser needs).
