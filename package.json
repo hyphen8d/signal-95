@@ -1,0 +1,12 @@
+{
+  "name": "signal-95",
+  "private": true,
+  "type": "module",
+  "description": "No dependencies and no build step -- this file only marks the repo as ES modules and names the scripts.",
+  "scripts": {
+    "dev": "node tools/dev-server.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "schemes": "node tools/check-schemes.mjs",
+    "stamp": "node tools/stamp.js"
+  }
+}

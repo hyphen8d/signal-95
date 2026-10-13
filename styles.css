@@ -1,0 +1,160 @@
+/* SIGNAL-95 -- the look. The style board (see CLAUDE.md) is the reference;
+   these tokens are its palette. Light comes from the top-left, every bevel
+   is 2px, and nothing here is copied from a real operating system: the
+   ground is a warm putty, not a cool gray, and the title bar is pine. */
+
+:root {
+  --putty: #C6C3BC;
+  --putty-down: #BDBAB2;
+  --chalk: #F4F2EC;
+  --bone: #E2DFD7;
+  --shade: #7D7A72;
+  --ink: #2A2925;
+  --ink-soft: #4A4842;
+  --muted: #8E8B83;
+  --pine: #23443A;
+  --amber: #E8A33D;
+  --tube: #12140F;
+  --phosphor: #7CFF8A;
+  --desk: #5E6B63;
+  --tip: #F4EBC8;
+  --rust: #6E2A22;
+
+  /* The two per-station levers, set on #tuner from schemes.js. */
+  --title: var(--pine);
+  --led: var(--phosphor);
+  --signal: 1;
+
+  --raised: inset -1px -1px var(--ink), inset 1px 1px var(--chalk), inset -2px -2px var(--shade), inset 2px 2px var(--bone);
+  --sunken: inset 1px 1px var(--shade), inset -1px -1px var(--chalk), inset 2px 2px var(--ink), inset -2px -2px var(--bone);
+  --pressed: inset 1px 1px var(--ink), inset -1px -1px var(--chalk), inset 2px 2px var(--shade), inset -2px -2px var(--bone);
+  --pane: inset 1px 1px var(--shade), inset -1px -1px var(--chalk);
+}
+
+* { box-sizing: border-box; }
+
+html, body { margin: 0; min-height: 100%; }
+
+body {
+  background: var(--desk);
+  color: var(--ink);
+  font-family: 'Pixelify Sans', monospace;
+  font-size: 14px;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  min-height: 100vh;
+  padding: 40px 16px;
+}
+
+.sr-only {
+  position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
+}
+
+.raised { background: var(--putty); box-shadow: var(--raised); }
+.sunken { box-shadow: var(--sunken); }
+.pane { box-shadow: var(--pane); }
+
+.btn {
+  font: inherit; color: var(--ink); border: 0; background: var(--putty);
+  box-shadow: var(--raised); cursor: pointer; padding: 0 10px; min-height: 26px;
+}
+.btn:active, .btn[aria-pressed="true"] { box-shadow: var(--pressed); background: var(--putty-down); }
+.btn:active { padding-top: 1px; padding-left: 11px; padding-right: 9px; }
+.btn:focus-visible { outline: 1px dotted var(--ink); outline-offset: -5px; }
+.btn.def { box-shadow: 0 0 0 1px var(--ink), var(--raised); }
+.btn:disabled { color: var(--muted); text-shadow: 1px 1px var(--chalk); cursor: default; }
+.btn svg { display: block; }
+
+/* ---- the window ---- */
+
+main { width: 100%; max-width: 720px; }
+
+.window { width: 100%; max-width: 720px; padding: 4px; display: flex; flex-direction: column; gap: 3px; }
+
+.titlebar {
+  background: var(--title); color: var(--chalk);
+  display: flex; align-items: center; gap: 8px; padding: 3px 4px 3px 6px;
+}
+.titlebar h1 { margin: 0; font-size: 14px; font-weight: 700; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.titlebar .btn { width: 22px; min-height: 20px; padding: 0; display: grid; place-items: center; }
+.titlebar .btn:active { padding: 1px 0 0 1px; }
+
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 5px 6px; }
+.toolbar .icon { width: 32px; display: grid; place-items: center; padding: 0; }
+.toolbar .preset { width: 28px; padding: 0; }
+.toolbar .preset[aria-pressed="true"] { font-weight: 700; }
+.sep { width: 2px; height: 22px; margin: 0 4px; box-shadow: inset 1px 0 var(--shade), inset -1px 0 var(--chalk); }
+.spacer { flex: 1; }
+
+.tabs { display: flex; padding: 6px 6px 0; margin-bottom: -3px; position: relative; z-index: 1; }
+.tab {
+  font: inherit; color: var(--ink-soft); border: 0; background: var(--putty); cursor: pointer;
+  padding: 3px 14px; margin-top: 3px;
+  box-shadow: inset 1px 1px var(--chalk), inset -1px 0 var(--ink), inset 2px 2px var(--bone), inset -2px 0 var(--shade);
+}
+.tab[aria-selected="true"] { color: var(--ink); font-weight: 700; padding: 4px 14px 6px; margin-top: 0; }
+.tab:focus-visible { outline: 1px dotted var(--ink); outline-offset: -4px; }
+
+.dialpanel { margin: 0 6px; padding: 16px 22px 14px; }
+
+.dial { position: relative; height: 80px; cursor: pointer; touch-action: none; user-select: none; }
+.dial:focus-visible { outline: 1px dotted var(--ink); outline-offset: 4px; }
+.dial .scale { position: absolute; left: 0; right: 0; top: 0; display: flex; justify-content: space-between; font-size: 11px; color: var(--ink-soft); }
+.dial .track { position: absolute; left: 0; right: 0; top: 40px; height: 6px; background: var(--bone); box-shadow: var(--sunken); }
+.dial .ticks { position: absolute; left: 0; right: 0; top: 50px; height: 8px; background: repeating-linear-gradient(90deg, var(--ink) 0 1px, transparent 1px 2.5%); }
+.dial .mark { position: absolute; font-size: 11px; transform: translateX(-50%); white-space: nowrap; }
+.dial .mark.up { top: 18px; }
+.dial .mark.down { top: 62px; }
+.dial .mark.on { font-weight: 700; }
+.dial .mark.crowded { visibility: hidden; }
+.dial .thumb { position: absolute; top: 32px; width: 12px; height: 22px; margin-left: -6px; background: var(--putty); box-shadow: var(--raised); }
+
+.lower { display: flex; gap: 10px; padding: 4px 6px; }
+
+.led {
+  flex: 1; min-height: 132px; background: var(--tube); padding: 10px 14px;
+  font-family: 'VT323', monospace; color: var(--led);
+  display: flex; flex-direction: column; gap: 2px;
+}
+.led .glow { opacity: calc(0.25 + 0.75 * var(--signal)); text-shadow: 0 0 6px var(--led); }
+.led .line1 { display: flex; justify-content: space-between; gap: 12px; font-size: 22px; }
+.led .title { font-size: 26px; color: var(--chalk); text-shadow: none; }
+.led .artist { font-size: 20px; }
+.led .tagline { font-size: 18px; opacity: 0.6; margin-top: auto; }
+
+.meters { width: 128px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
+.bars { display: flex; align-items: flex-end; gap: 3px; height: 44px; }
+.bars span { width: 12px; box-shadow: var(--pane); }
+.bars span.on { background: var(--pine); box-shadow: none; }
+.buffer { height: 16px; padding: 3px; display: flex; gap: 2px; background: var(--bone); }
+.buffer span { width: 9px; background: var(--pine); }
+
+.statusbar { display: flex; gap: 3px; font-size: 12px; }
+.statusbar > div { padding: 3px 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.statusbar .wide { flex: 2; }
+.statusbar .mid { flex: 1; }
+.statusbar .clock { width: 72px; text-align: right; }
+
+/* ---- the Signal Lost dialog ---- */
+
+.scrim { position: fixed; inset: 0; display: grid; place-items: center; padding: 16px; }
+.scrim[hidden] { display: none; }
+.dialog { width: 100%; max-width: 390px; padding: 4px; display: flex; flex-direction: column; gap: 3px; box-shadow: var(--raised), 6px 6px 0 rgba(18, 20, 15, 0.35); }
+.dialog .titlebar { background: var(--rust); }
+.dialog .body { display: flex; gap: 14px; padding: 16px 16px 8px; }
+.dialog .body p { margin: 0 0 6px; }
+.dialog .body .soft { font-size: 13px; color: var(--ink-soft); }
+.dialog .actions { display: flex; justify-content: flex-end; gap: 8px; padding: 6px 12px 12px; }
+.dialog .actions .btn { min-width: 96px; min-height: 30px; }
+
+#ytDock { position: fixed; left: -9999px; top: 0; width: 260px; height: 200px; }
+
+@media (max-width: 560px) {
+  body { padding: 16px; }
+  .lower { flex-direction: column; }
+  .meters { width: auto; flex-direction: row; align-items: center; flex-wrap: wrap; }
+  .meters .buffer { flex: 1; min-width: 90px; }
+  #stSn { display: none; }
+}

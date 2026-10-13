@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SIGNAL-95</title>
+<meta name="description" content="SIGNAL-95: an internet-radio tuner in the style of a mid-90s desktop app. Sixteen curated stations across two bands.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;700&family=VT323&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./styles.css">
+<script>
+  // The YouTube IFrame API calls this global once, possibly before or after
+  // player.js asks for a player -- so the flag and the queue both exist
+  // before the API script can load. (SIGNAL's SIGNAL_YT_QUEUE, same shape.)
+  window.SIGNAL95_YT_QUEUE = []
+  window.onYouTubeIframeAPIReady = () => {
+    window.SIGNAL95_YT_READY = true
+    for (const f of window.SIGNAL95_YT_QUEUE.splice(0)) f()
+  }
+</script>
+</head>
+<body>
+<main>
+<section class="window raised" id="tuner" aria-labelledby="title">
+  <header class="titlebar">
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 14h10V7H3z"/><path d="M5 7l6-5"/><circle cx="6" cy="10.5" r="1.5"/><path d="M9.5 9.5h2M9.5 11.5h2"/></svg>
+    <h1 id="title">SIGNAL-95</h1>
+    <button class="btn" id="power" aria-label="Power (P)" aria-pressed="false" title="Power (P)">
+      <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true" fill="none" stroke="#2A2925" stroke-width="1.6"><path d="M3 2.2a4 4 0 1 0 4 0"/><path d="M5 0.5v4"/></svg>
+    </button>
+  </header>
+
+  <div class="toolbar pane" role="toolbar" aria-label="Tuning">
+    <button class="btn icon" id="seekDown" aria-label="Seek down (Down arrow)" title="Seek down (↓)">
+      <svg width="14" height="10" viewBox="0 0 14 10" aria-hidden="true" fill="#2A2925"><path d="M7 0v10L0 5zM14 0v10L7 5z"/></svg>
+    </button>
+    <button class="btn icon" id="seekUp" aria-label="Seek up (Up arrow)" title="Seek up (↑)">
+      <svg width="14" height="10" viewBox="0 0 14 10" aria-hidden="true" fill="#2A2925"><path d="M0 0v10l7-5zM7 0v10l7-5z"/></svg>
+    </button>
+    <button class="btn" id="scan" aria-pressed="false" title="Scan (S)"><u>S</u>can</button>
+    <div class="sep" aria-hidden="true"></div>
+    <div id="presets" role="group" aria-label="Presets" style="display:flex;gap:4px;flex-wrap:wrap"></div>
+    <div class="spacer"></div>
+    <button class="btn icon" id="mute" aria-label="Mute (M)" aria-pressed="false" title="Mute (M)">
+      <svg width="16" height="14" viewBox="0 0 16 14" aria-hidden="true" fill="none" stroke="#2A2925" stroke-width="1.5"><path d="M1 5h3l4-3v10L4 9H1z" fill="#2A2925"/><path class="waves" d="M10.5 4.5a3.5 3.5 0 0 1 0 5M12.5 2.5a6.5 6.5 0 0 1 0 9"/></svg>
+    </button>
+  </div>
+
+  <div class="tabs" role="tablist" aria-label="Band">
+    <button class="tab" role="tab" data-band="ym" aria-selected="true">YM Band</button>
+    <button class="tab" role="tab" data-band="zm" aria-selected="false">ZM Band</button>
+  </div>
+
+  <div class="dialpanel raised">
+    <div class="dial" id="dial" role="slider" tabindex="0" aria-label="Frequency">
+      <div class="scale" id="scale"></div>
+      <div class="track"></div>
+      <div class="ticks"></div>
+      <div id="marks"></div>
+      <div class="thumb" id="thumb"></div>
+    </div>
+  </div>
+
+  <div class="lower">
+    <div class="led sunken" id="led">
+      <div class="line1 glow"><span id="ledFreq"></span><span id="ledTime"></span></div>
+      <div class="title" id="ledTitle"></div>
+      <div class="artist glow" id="ledArtist"></div>
+      <div class="tagline glow" id="ledTagline"></div>
+    </div>
+    <div class="meters raised">
+      <span>Signal</span>
+      <div class="bars" id="bars" aria-hidden="true"></div>
+      <span>Buffer</span>
+      <div class="buffer sunken" id="buffer" aria-hidden="true"></div>
+    </div>
+  </div>
+
+  <footer class="statusbar">
+    <div class="pane wide" id="stLock"></div>
+    <div class="pane mid" id="stLink"></div>
+    <div class="pane mid" id="stSn"></div>
+    <div class="pane clock" id="stClock"></div>
+  </footer>
+</section>
+</main>
+
+<div class="scrim" id="lost" hidden>
+  <section class="dialog raised" role="alertdialog" aria-modal="true" aria-labelledby="lostTitle" aria-describedby="lostBody">
+    <header class="titlebar"><h1 id="lostTitle">Signal Lost</h1></header>
+    <div class="body">
+      <svg width="36" height="36" viewBox="0 0 36 36" aria-hidden="true" fill="none" stroke="#2A2925" stroke-width="2"><path d="M6 32h24"/><path d="M18 32V14"/><path d="M10 6a11 11 0 0 1 16 0M13 10a6 6 0 0 1 10 0"/><path d="M24 20l8 8M32 20l-8 8" stroke="#6E2A22" stroke-width="3"/></svg>
+      <div id="lostBody">
+        <p id="lostLine"></p>
+        <p class="soft">The upload may have been taken down. SIGNAL-95 can skip ahead to the next track.</p>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="btn def" id="lostNext">Next Track</button>
+      <button class="btn" id="lostRetry">Retry</button>
+    </div>
+  </section>
+</div>
+
+<div id="announce" class="sr-only" role="status" aria-live="polite"></div>
+<div id="ytDock"></div>
+
+<script type="module" src="./main.js"></script>
+<script src="https://www.youtube.com/iframe_api" async></script>
+</body>
+</html>
