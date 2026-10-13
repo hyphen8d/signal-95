@@ -26,6 +26,7 @@ Everything works with the mouse, and everything has a key.
 | Scan | `S` | Visit each station in turn |
 | Volume slider (press, drag or wheel) | `−` `+` | Volume down / up |
 | Speaker button | `M` | Mute |
+| Station → Sleep timer | `T` | Sleep in 60, 30, 15 minutes, or off; fades out, then switches off |
 | Right-click a preset | `Shift+F10` | Preset menu: tune, station info, copy link |
 | Station → Copy Station Link | `K` | Copy a link to the station you are on |
 | View → Lyrics | `L` | Show the words on the display, in time |

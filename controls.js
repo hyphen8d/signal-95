@@ -19,6 +19,7 @@ export const CONTROLS = [
   { mouse: 'Scan', keys: ['S'], does: 'Visit each station in turn' },
   { mouse: 'Volume slider (press, drag or wheel)', keys: ['−', '+'], does: 'Volume down / up' },
   { mouse: 'Speaker button', keys: ['M'], does: 'Mute' },
+  { mouse: 'Station → Sleep timer', keys: ['T'], does: 'Sleep in 60, 30, 15 minutes, or off; fades out, then switches off' },
   { mouse: 'Right-click a preset', keys: ['Shift+F10'], does: 'Preset menu: tune, station info, copy link' },
   { mouse: 'Station → Copy Station Link', keys: ['K'], does: 'Copy a link to the station you are on' },
   { mouse: 'View → Lyrics', keys: ['L'], does: 'Show the words on the display, in time' },

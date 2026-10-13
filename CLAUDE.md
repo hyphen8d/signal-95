@@ -254,6 +254,30 @@ file is the only place the keys are written down, as in SIGNAL.
 Off-station it says "No signal", powered off "Power is off" -- SIGNAL's
 dead-feedback fix for the same key.
 
+### Sleep timer (2026-10-13)
+
+SIGNAL's, rule for rule (constants asserted equal to SIGNAL's): `T` steps
+DOWN 60 -> 30 -> 15 -> off, the clock-radio way; Station -> Sleep timer
+offers the same steps as radio items, so the mouse goes straight to one,
+and the running one shows what is left of it. The status bar carries the
+readout (`Sleep 42 min`, then `0:ss` through the last minute).
+
+- **A deadline, not a countdown**, ticked every 250ms: a background tab
+  gets intervals late, and late must not mean slow.
+- **The last 30s fade** -- a hard cut is what wakes someone up -- through
+  `applyMusic`/`applyOutput`, so the music and our own bus fade together,
+  as a third factor beside the duck and the listener's volume. **The
+  slider follows the fade down** (shows the level the speaker is at) while
+  `state.volume` is never touched and comes back whole.
+- **At zero**, menus and any open dialog close by their own paths, then
+  an ordinary power-off. Powering off by hand clears the timer; `T` with
+  the set off says "Power is off". Never saved -- a timer that survived a
+  reload would switch off a set nobody asked it to.
+
+Verified with the page's `Date.now` skewed forward: 14s left -> slider and
+player at 32 (of 70); 4s -> 7; past the deadline, the weather window
+closed, the set off, and the next power-on back at 70.
+
 ### Lyrics (2026-10-13)
 
 `L` / View -> Lyrics turns the display panel into a karaoke crawl --
@@ -457,8 +481,7 @@ and deleting the dot rule were both checked to turn the suite red.
 ## Not built yet
 
 A DOM test harness (everything UI-side is verified by driving headless
-Chromium over CDP; the drives live outside the repo), SIGNAL's sleep timer
-(`T`), its liners, and its visualizer and game -- the last two would need
+Chromium over CDP; the drives live outside the repo), SIGNAL's liners, and its visualizer and game -- the last two would need
 their own thinking about what a 90s desktop app's equivalent is
 (a screensaver was the original idea).
 

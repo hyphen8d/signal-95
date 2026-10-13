@@ -48,3 +48,32 @@ export function musicVolume(q) {
   const t = Math.min(1, Math.max(0, (q - LOCK_SIGNAL) / (1 - LOCK_SIGNAL)))
   return Math.round(70 + 30 * t)
 }
+
+// ---- the sleep timer (SIGNAL's, 2026-08-27) -------------------------------
+// The steps T walks through, DOWN, then off: a clock radio's SLEEP button
+// offers the longest first and you step toward the one you want.
+export const SLEEP_STEPS = [60, 30, 15]
+// The last stretch fades rather than cuts. A hard cut at 0:00 is the one
+// thing a sleep timer must not do: the feature exists for someone on their
+// way to sleep, and silence arriving as an EVENT is what wakes them.
+export const SLEEP_FADE_MS = 30_000
+
+/** The step after `minutes` (0 = off): 60 -> 30 -> 15 -> off -> 60. */
+export function nextSleepStep(minutes) {
+  const i = SLEEP_STEPS.indexOf(minutes)
+  return i === -1 ? SLEEP_STEPS[0] : (SLEEP_STEPS[i + 1] ?? 0)
+}
+
+/** The level multiplier with `leftMs` to go: 1 until the last
+ *  SLEEP_FADE_MS, then a straight line to 0. */
+export function sleepFade(leftMs) {
+  return Math.max(0, Math.min(1, leftMs / SLEEP_FADE_MS))
+}
+
+/** The status-bar readout: whole minutes while there are some, then m:ss
+ *  through the last minute -- the fade lives in there and you can watch it. */
+export function sleepReadout(leftMs) {
+  const s = Math.max(0, Math.ceil(leftMs / 1000))
+  if (s > 60) return `Sleep ${Math.ceil(s / 60)} min`
+  return `Sleep 0:${String(s).padStart(2, '0')}`
+}

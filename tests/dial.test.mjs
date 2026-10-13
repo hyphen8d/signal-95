@@ -107,3 +107,23 @@ test('volume: the listener\'s level scales the music, never overrides the dial',
     assert.ok(mix.effectiveVolume(v, 1) >= mix.effectiveVolume(v - 10, 1), `louder at ${v}`)
   }
 })
+
+test('sleep timer: steps down then off, fades over the last 30s only', async () => {
+  const mix = await import('../mix.js')
+  assert.deepEqual([0, 60, 30, 15].map(mix.nextSleepStep), [60, 30, 15, 0])
+  assert.equal(mix.sleepFade(10 * 60_000), 1)
+  assert.equal(mix.sleepFade(mix.SLEEP_FADE_MS), 1)
+  assert.equal(mix.sleepFade(mix.SLEEP_FADE_MS / 2), 0.5)
+  assert.equal(mix.sleepFade(0), 0)
+  assert.equal(mix.sleepFade(-500), 0)
+  assert.equal(mix.sleepReadout(59 * 60_000 + 1), 'Sleep 60 min')
+  assert.equal(mix.sleepReadout(61_000), 'Sleep 2 min')
+  assert.equal(mix.sleepReadout(24_200), 'Sleep 0:25')
+})
+
+test('sleep constants agree with SIGNAL', { skip: !existsSync(path.join(SIGNAL_DIR, 'constants.js')) && 'no SIGNAL checkout beside this repo' }, async () => {
+  const mix = await import('../mix.js')
+  const src = readFileSync(path.join(SIGNAL_DIR, 'constants.js'), 'utf8')
+  assert.equal(src.match(/export const SLEEP_STEPS = (\[[^\]]*\])/)[1].replace(/\s/g, ''), JSON.stringify(mix.SLEEP_STEPS))
+  assert.equal(Number(src.match(/export const SLEEP_FADE_MS = ([\d_]+)/)[1].replace(/_/g, '')), mix.SLEEP_FADE_MS)
+})

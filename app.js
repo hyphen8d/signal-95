@@ -45,6 +45,9 @@ const state = {
   showLyrics: false,     // the display's mode: Now Playing, or the lyric crawl
   weatherConsent: null,  // 'yes' | 'no' | null (never asked) -- the ONLY weather state saved
   duck: 1,               // the music's share under a spoken ID, 0.5..1
+  sleepMinutes: 0,       // the sleep timer's step: 0 (off), 60, 30, 15
+  sleepUntil: null,      // its deadline (a deadline, not a countdown -- see tickSleep)
+  sleepFade: 1,          // its level multiplier: 1, falling to 0 over the last 30s
   scanTimer: 0,
   flash: '',
   flashUntil: 0,
@@ -136,6 +139,66 @@ function remember(station) {
 function stopPlayback() {
   state.track = null
   if (player) player.stop()
+}
+
+// ---------------------------------------------------------------- sleep timer
+// SIGNAL's (2026-08-27), the clearest "would a real radio have this?" yes
+// there is: every clock radio has a SLEEP button. T steps DOWN through
+// 60/30/15 then off; Station -> Sleep Timer offers the same steps as radio
+// items, so the mouse can go straight to one. The last 30s fade both the
+// music and our own bus (through applyMusic/applyOutput, the one level
+// path), the volume slider follows the fade down, and at zero the windows
+// close by their own paths before an ordinary power-off. Switching off by
+// hand clears it. Not saved: a timer that survived a reload would switch
+// off a set nobody had asked it to.
+
+function setSleep(minutes) {
+  if (!state.power) { flash('Power is off'); return }
+  state.sleepMinutes = minutes
+  state.sleepUntil = minutes ? Date.now() + minutes * 60_000 : null
+  state.sleepFade = 1
+  applyOutput()
+  sound.detent()
+  const msg = minutes ? `Sleep in ${minutes} minutes` : 'Sleep timer off'
+  flash(msg)
+  announce(msg, 'sleep')
+  render()
+}
+
+const cycleSleep = () => setSleep(mix.nextSleepStep(state.sleepMinutes))
+
+function clearSleep() {
+  if (!state.sleepUntil && state.sleepFade === 1) return
+  state.sleepMinutes = 0
+  state.sleepUntil = null
+  state.sleepFade = 1
+  applyOutput()
+}
+
+/** On a timer, against the deadline: a background tab gets its intervals
+ *  late rather than often, and late must not mean slow. */
+function tickSleep() {
+  if (!state.sleepUntil) return
+  if (!state.power) { clearSleep(); return }
+  const left = state.sleepUntil - Date.now()
+  if (left <= 0) { sleepExpired(); return }
+  const fade = mix.sleepFade(left)
+  if (fade !== state.sleepFade) {
+    state.sleepFade = fade
+    applyOutput()
+    drawVolume()
+  }
+}
+
+function sleepExpired() {
+  clearSleep()
+  // Windows and menus come down by their own close paths first, so the
+  // power-off lands on the radio and not on top of an open dialog.
+  ctxMenu?.close()
+  menuBar?.close()
+  if (modal) closeModal({ restore: false })
+  if (state.power) togglePower()
+  announce('Sleep timer: switched off', 'sleep')
 }
 
 // ---------------------------------------------------------------- lyrics
@@ -463,7 +526,7 @@ function togglePower() {
   // The power key is a user gesture -- the moment an AudioContext may start.
   if (state.power) sound.start()
   if (state.power && state.station) { sound.handshake(); tuneIn(state.station); stationId(state.station, false) }
-  if (!state.power) { stopScan(); sound.cancelHandshake(); sound.cancelIdent(); clearDuck(); remember(state.station); stopPlayback() }
+  if (!state.power) { stopScan(); clearSleep(); sound.cancelHandshake(); sound.cancelIdent(); clearDuck(); remember(state.station); stopPlayback() }
   announce(state.power ? 'Power on' : 'Power off', 'power')
   render()
 }
@@ -496,7 +559,7 @@ function applyMusic(q) {
   if (!player) return
   // Off is silence at the player too, not just an empty one: powering on
   // then goes through the same unMute-first path as any other rise.
-  const eff = state.muted || !state.power ? 0 : Math.round(mix.effectiveVolume(state.volume, q) * state.duck)
+  const eff = state.muted || !state.power ? 0 : Math.round(mix.effectiveVolume(state.volume, q) * state.duck * state.sleepFade)
   if (eff === lastMusic) return
   lastMusic = eff
   if (eff <= 0) {
@@ -514,7 +577,7 @@ function currentSignal() {
 
 /** Mute or volume changed: both outputs follow at once. */
 function applyOutput() {
-  sound.setOutput(state.muted, state.volume / 100)
+  sound.setOutput(state.muted, (state.volume / 100) * state.sleepFade)
   lastMusic = null
   applyMusic(currentSignal())
 }
@@ -538,11 +601,16 @@ const nudgeVolume = (dir) => setVolume(state.volume + dir * mix.VOLUME_STEP)
 
 function drawVolume() {
   const v = state.volume
+  // During the sleep fade the slider shows the level the speaker is
+  // actually at, not the setting -- SIGNAL's rule: the screen must never
+  // claim a level the speaker isn't at. The setting itself is untouched
+  // and comes back whole on the next power-on.
+  const shown = Math.round(v * state.sleepFade)
   const s = $('volume')
-  s.setAttribute('aria-valuenow', String(v))
-  s.setAttribute('aria-valuetext', state.muted ? `${v}%, muted` : `${v}%`)
-  $('volThumb').style.left = `${v}%`
-  $('volFill').style.width = `${v}%`
+  s.setAttribute('aria-valuenow', String(shown))
+  s.setAttribute('aria-valuetext', state.muted ? `${v}%, muted` : state.sleepFade < 1 ? `${shown}%, fading for sleep` : `${v}%`)
+  $('volThumb').style.left = `${shown}%`
+  $('volFill').style.width = `${shown}%`
   s.classList.toggle('muted', state.muted)
 }
 
@@ -918,6 +986,9 @@ function render() {
     : state.scanTimer ? `Scanning · ${freqLine}`
     : s ? `Locked · ${freqLine}` : `Searching · ${freqLine}`
   $('stLink').textContent = `Link ${dial.linkSpeed(q)}`
+  const sleepPane = $('stSleep')
+  sleepPane.hidden = !state.sleepUntil
+  if (state.sleepUntil) sleepPane.textContent = mix.sleepReadout(state.sleepUntil - Date.now())
   $('stSn').textContent = `S/N ${Math.round(q * 100)}%`
   const time = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
   const wxNow = wx.data ? W.buildWeatherView(wx.data, Date.now()).current.tempText : ''
@@ -1036,6 +1107,7 @@ function onKey(e) {
   else if (k === 'n' || k === 'N') skipTrack()
   else if (k === 'l' || k === 'L') toggleLyrics()
   else if (k === 'w' || k === 'W') openWeather()
+  else if (k === 't' || k === 'T') cycleSleep()
   else if (k === '=' || k === '+') nudgeVolume(1)
   else if (k === '-' || k === '_') nudgeVolume(-1)
   else return
@@ -1112,6 +1184,16 @@ function menus() {
         { label: 'Volume &Up', shortcut: '+', action: () => nudgeVolume(1) },
         { label: 'Volume &Down', shortcut: '−', action: () => nudgeVolume(-1) },
         { label: '&Mute', shortcut: 'M', type: 'check', checked: state.muted, action: toggleMute },
+        { separator: true },
+        { heading: 'Sleep timer · T' },
+        ...[0, ...mix.SLEEP_STEPS.slice().reverse()].map((m) => ({
+          label: m ? `${m === 15 ? '1&5' : `&${String(m)[0]}${String(m).slice(1)}`} minutes` : '&Off',
+          // The running step shows what is left of it.
+          shortcut: m && m === state.sleepMinutes && state.sleepUntil ? mix.sleepReadout(state.sleepUntil - Date.now()).replace('Sleep ', '') : '',
+          type: 'radio',
+          checked: m === state.sleepMinutes,
+          action: () => setSleep(m),
+        })),
         { separator: true },
         { label: '&Copy Station Link', shortcut: 'K', disabled: !state.station, action: () => copyLink(state.station) },
       ],
@@ -1235,6 +1317,8 @@ export async function start() {
   // Lyric lines change mid-second; a quarter-second tick, only while the
   // crawl is up, keeps them on the beat without redrawing the rest 4x.
   setInterval(() => { if (lyricRows()) render() }, 250)
+  // A quarter-second sleep tick so the 30s fade is a slope, not 30 steps.
+  setInterval(tickSleep, 250)
 
   player = await createPlayer({
     // The second, informed lyrics ask: on PLAYING the real duration is
