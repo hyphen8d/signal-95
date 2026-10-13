@@ -107,6 +107,7 @@ main { width: 100%; max-width: 720px; }
 
 .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 5px 6px; }
 .toolbar .icon { width: 32px; display: grid; place-items: center; padding: 0; }
+.presets { display: flex; gap: 4px; flex-wrap: wrap; }
 .toolbar .preset { width: 28px; padding: 0; }
 .toolbar .preset[aria-pressed="true"] { font-weight: 700; }
 .sep { width: 2px; height: 22px; margin: 0 4px; box-shadow: inset 1px 0 var(--shade), inset -1px 0 var(--chalk); }
@@ -276,6 +277,23 @@ kbd { display: inline-block; font: inherit; font-variant-ligatures: none; font-s
 .gamehelp { font-size: 12px; color: var(--ink-soft); padding: 2px 6px 4px; }
 
 #ytDock { position: fixed; left: -9999px; top: 0; width: 260px; height: 200px; }
+
+/* The toolbar on a phone (2026-10-13, reported: "the presets wrap/look
+   odd"). Left to flex-wrap, it broke wherever the space ran out: the
+   separator dangling at the end of row one, the presets on row two, and
+   the volume slider and speaker stranded on a third. Now it is two rows
+   on purpose: transport on the left and sound on the right, then the
+   presets as an even strip across the full width -- equal columns for
+   however many the band has, and taller, for a thumb. */
+@media (max-width: 600px) {
+  .toolbar .sep { display: none; }
+  .toolbar .presets {
+    order: 10; flex-basis: 100%;
+    display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 4px;
+  }
+  .toolbar .preset { width: auto; min-height: 38px; }
+  .toolbar .volume { width: 84px; }
+}
 
 @media (max-width: 560px) {
   .guidebody { flex-direction: column; height: 70vh; }

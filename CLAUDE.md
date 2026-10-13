@@ -563,6 +563,17 @@ environment, not a dead roster.
 Mutate to check a test can fail (SIGNAL's rule): breaking the band copy
 and deleting the dot rule were both checked to turn the suite red.
 
+## On a phone (2026-10-13)
+
+Under 600px the toolbar is two deliberate rows, not a flex-wrap: transport
+(seek, seek, Scan) left and sound (volume, speaker) right, then the
+presets as an even full-width strip (`grid-auto-flow: column`, so it fits
+however many the band has) at a thumb's height. Left to wrap, it broke
+wherever the space ran out -- the separator dangling, the speaker alone on
+a third row (reported: "the presets wrap/look odd"). Checked at 360, 390,
+430, 600 and 601px. Touch screens (`pointer: coarse`) also get "Tap the
+power button" where a keyboard gets "Press P".
+
 ## Load order (2026-10-13)
 
 `main.js` starts fetching SIGNAL's roster at once, in parallel with the

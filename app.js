@@ -156,6 +156,7 @@ function stopPlayback() {
 const reducedMotion = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
 const saver = { active: false, engine: null, raf: 0, last: 0, t0: 0, startedAt: 0, stationId: undefined, from: null, box: null }
 let lastInputAt = Date.now()
+const COARSE = globalThis.matchMedia?.('(pointer: coarse)').matches ?? false
 const SAVER_GRACE_MS = 300 // the key or click that started it must not end it
 // Mouse movement is judged more gently, and this is the bug the first cut
 // shipped (2026-10-13, reported: "I can't get it to work with V or the
@@ -1297,7 +1298,8 @@ function render() {
 
   const freqLine = `${state.freq.toFixed(1)} ${band.label}`
   if (!state.power) {
-    setLed(`${freqLine}`, '', 'Power is off', 'Press P, or the button in the corner', '')
+    // A phone has no P key: say what a thumb can do instead.
+    setLed(`${freqLine}`, '', 'Power is off', COARSE ? 'Tap the power button, top right' : 'Press P, or the button in the corner', '')
   } else if (s && lyricRows()) {
     const [cur, next] = lyricRows()
     setLed(`${freqLine}  ${s.callsign}`, clock(player?.position() ?? 0), cur, next, `${state.track.title} — ${state.track.artist}`)
