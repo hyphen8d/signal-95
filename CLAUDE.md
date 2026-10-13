@@ -527,6 +527,24 @@ before the set answered a key**, found while debugging the screensaver
 parallel; a new module goes into the list, not onto a new line of its own
 `await`.
 
+## Stale pages and stylesheets (2026-10-13)
+
+The modules were stamped from day one; `styles.css` and `index.html` were
+not, and GitHub Pages lets a browser keep both for 10 minutes. Reported
+from an iPad: the new screensaver opened **beside** the window and pushed
+it off to the left -- new code, old stylesheet, so the overlay had no
+`position: fixed` and fell into the page's flex row. Two fixes in
+`main.js`:
+
+- The stylesheet link is re-pointed at `styles.css?v=<build>`.
+- `index.html` carries `<meta name="signal95-build">`, written by
+  `tools/stamp.js` beside build.json (`tests/stamp.test.mjs` fails if they
+  disagree). A page whose build is not the live one reloads **once**, at
+  `?b=<build>` -- a URL no cache has seen; the `b=` is the loop guard.
+
+So: **always deploy with `npm run stamp`** (it now writes both), and
+anything new the page fetches by a plain URL needs the same treatment.
+
 ## Things learned building it
 
 - **Dial labels are placed by measurement, not alternation** (`placeMarks`

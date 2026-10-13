@@ -3,12 +3,16 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- The build this markup belongs to. tools/stamp.js writes it beside
+     build.json; main.js reloads once if they disagree (a stale cached page). -->
+<meta name="signal95-build" content="2026-10-13.14">
 <title>SIGNAL-95</title>
 <meta name="description" content="SIGNAL-95: an internet-radio tuner in the style of a mid-90s desktop app. Sixteen curated stations across two bands.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;700&family=VT323&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="./styles.css">
+<!-- Re-pointed at styles.css?v=<build> by main.js (see there). -->
+<link rel="stylesheet" href="./styles.css" id="styles">
 <script>
   // The YouTube IFrame API calls this global once, possibly before or after
   // player.js asks for a player -- so the flag and the queue both exist

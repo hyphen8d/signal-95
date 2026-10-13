@@ -36,3 +36,13 @@ const build = `${today}.${n}`
 
 writeFileSync(file, JSON.stringify({ build }) + '\n')
 console.log(`build.json: ${prev || '(none)'} -> ${build}`)
+
+// SIGNAL-95 (2026-10-13): the page carries its build too, so main.js can
+// tell a stale cached index.html from a current one. One stamp, two places,
+// written together -- tests/stamp.test.mjs fails if they ever disagree.
+const page = path.join(here, '..', 'index.html')
+const html = readFileSync(page, 'utf8')
+const next = html.replace(/(<meta name="signal95-build" content=")[^"]*(")/, `$1${build}$2`)
+if (next === html && !html.includes(`content="${build}"`)) throw new Error('index.html has no signal95-build meta to stamp')
+writeFileSync(page, next)
+console.log(`index.html: signal95-build -> ${build}`)
