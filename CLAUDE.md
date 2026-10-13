@@ -98,6 +98,10 @@ identity, as in SIGNAL: one instance per full URL).
 - `player.js` -- the YouTube IFrame player (same vars as SIGNAL's).
 - `mix.js` -- pure: static level and music volume from the signal value.
 - `broadcast.js` -- pure: where in a track you land (join point, resume).
+- `lyrics.js` -- pure: SIGNAL's synced-lyrics logic, ported (agreement
+  test reads SIGNAL's voice.js source for the constants and URLs).
+- `weather.js` -- pure: SIGNAL's weather data half, ported (agreement test
+  imports SIGNAL's weather.js and compares tables, buckets and the URL).
 - `sound.js` -- WebAudio: the line-noise bed, the lock handshake, mute.
 - `tools/dev-server.mjs` -- see below.
 
@@ -219,6 +223,72 @@ CUED -> seek -> play sequence against the real player since 8/20.
 Known soft spot: a stale CUED that arrives after the next cue but before
 its video is ready may read a duration of 0 and start that track at the
 top -- a missed join, never a wrong station.
+
+### Secret stations, Lock On, Next Track (2026-10-13)
+
+SIGNAL's NIN (613.0 YM) and GREEN ROOM (420.0 YM) arrive with the roster
+(`roster.secretStations`) and keep SIGNAL's 50th-pass policy, which split
+"nearest station" into three questions -- three call sites here:
+
+- **What can a sweep land on?** Public stations only (`tune`, seek,
+  scan). Dragging onto 613.0 exactly does not lock.
+- **What is the set picking up?** Public + secret (`signalNearest`): the
+  bars, S/N, static and music level all read it. Near an uncaught secret
+  the display glows in its colour and says only "Carrier". This also
+  fixed a real bug before it shipped: with signal measured against public
+  stations only, a caught secret would have played under full static.
+- **What can Lock On catch?** Public + secret (`lockOn`: Enter, or
+  Tuning -> Lock On). On a public station it centres the dial, which is
+  why the menu item gives nothing away.
+
+`0` and `Shift+0` (matched on `e.code`, not `')'`, so non-US layouts work)
+tune them directly. A caught secret holds inside its lock radius and is
+never restored on reload. They are in no list, guide or preset, refuse a
+link (`K`), get the jingle but no voice (SIGNAL has no clips for them),
+and are schemed by `forcedPhosphor` via `FORCED_SCHEMES` -- generic, so a
+future secret with a listed tint needs no code. **Undocumented on
+purpose**: not in README, the shortcuts dialog or `controls.js`; this
+file is the only place the keys are written down, as in SIGNAL.
+
+`N` / Station -> Next Track (SIGNAL's key): the next track from the top.
+Off-station it says "No signal", powered off "Power is off" -- SIGNAL's
+dead-feedback fix for the same key.
+
+### Lyrics (2026-10-13)
+
+`L` / View -> Lyrics turns the display panel into a karaoke crawl --
+current line bright, next dim, `♪` through a blank tag (SIGNAL's sentinel
+rule), "Instrumental" for tracks SIGNAL's roster marks wordless (via its
+own `trackIsInstrumental`, handed over by roster.js, never restated). The
+logic is SIGNAL's, ported whole into `lyrics.js`: get then search
+fallback, rank by closeness to the playing length, the 12s duration gate,
+a dropped request retryable rather than a permanent no, and the informed
+re-ask on PLAYING. **One deliberate difference:** LRCLIB is asked only
+while lyrics are showing, not on every track as SIGNAL does -- a listener
+who never opens them sends nothing anywhere. A quarter-second tick runs
+only while the crawl is up.
+
+Inherited quirk, ported as-is and flagged by the port: the 3-attempt cap
+only binds at duration 0, so a down LRCLIB is re-asked on every PLAYING.
+Change it in SIGNAL first if it is to change.
+
+### Weather (2026-10-13)
+
+`W` / View -> Weather. `weather.js` is SIGNAL's data half; the window
+follows SIGNAL's card flow step for step: consent before anything, the
+location prompt raised inside the "Yes" click, **only the yes/no saved**
+(`weatherConsent` in the store; position and reading are memory-only),
+an insecure page never recorded as a refusal (`requestLocation` returns
+`'insecure'` itself -- one step safer than SIGNAL, where callers had to
+check first), and a refresh timer (`refreshDue`) that never runs without
+a location in hand, so it can never raise the prompt. An aside, like
+SIGNAL's card: a window over the radio, and the temperature in the status
+bar beside the clock. The consent copy says the location goes only to the
+forecast service and is kept only while the page is open; its first draft
+said "one lookup", which the 15-minute refresh made untrue.
+
+Verified end to end with LRCLIB and Open-Meteo intercepted at the network
+layer (CDP `Fetch`) in their captured shapes, and geolocation emulated.
 
 ### Station IDs (2026-10-13)
 
@@ -370,6 +440,11 @@ and deleting the dot rule were both checked to turn the suite red.
   `text: '\r'` or the browser never turns it into a button click -- the
   first drive reported "Enter on OK does nothing", which was the harness.
   Alt+letter needs `modifiers: 1` and the right `code`.
+- **A crashed drive leaves its browser running.** The next drive on the
+  same debugging port connects to the OLD browser, with its old storage --
+  which is how a "fresh" weather run skipped the consent card. Kill the
+  headless instances by PID (matching `pkill -f` on the profile path also
+  matches, and kills, the shell running it) and use a new port.
 - **Measuring audio headlessly has two traps.** Headless Chrome cannot
   play YouTube, so powering on opens Signal Lost, the modal swallows every
   key after it, and a "tune and measure" run measures one station six
@@ -381,10 +456,11 @@ and deleting the dot rule were both checked to turn the suite red.
 
 ## Not built yet
 
-Lyrics, weather, the secret stations (handed over by `roster.js` as
-`secretStations`, not on the dial -- they must stay generic on
-`station.secret`, as in SIGNAL), persistence beyond band/frequency/mute,
-and a DOM test harness.
+A DOM test harness (everything UI-side is verified by driving headless
+Chromium over CDP; the drives live outside the repo), SIGNAL's sleep timer
+(`T`), its liners, and its visualizer and game -- the last two would need
+their own thinking about what a 90s desktop app's equivalent is
+(a screensaver was the original idea).
 
 Deploy is GitHub Pages from `main` (live since 2026-10-12 at
 hyphen8d.github.io/signal-95): every push to main ships, so

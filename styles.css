@@ -156,6 +156,11 @@ main { width: 100%; max-width: 720px; }
 .led .title { font-size: 26px; color: var(--chalk); text-shadow: none; }
 .led .artist { font-size: 20px; }
 .led .tagline { font-size: 18px; opacity: 0.6; margin-top: auto; }
+/* Lyrics mode: the current line takes the title row, the next line the
+   artist row, dimmer; the song moves down to the small row. Lines wrap
+   rather than truncate -- a cut-off lyric is worse than a taller panel. */
+.led.lyrics .title { font-size: 24px; }
+.led.lyrics .artist { opacity: 0.55; text-shadow: none; }
 
 .meters { width: 128px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
 .bars { display: flex; align-items: flex-end; gap: 3px; height: 44px; }
@@ -168,7 +173,7 @@ main { width: 100%; max-width: 720px; }
 .statusbar > div { padding: 3px 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .statusbar .wide { flex: 2; }
 .statusbar .mid { flex: 1; }
-.statusbar .clock { width: 72px; text-align: right; }
+.statusbar .clock { min-width: 72px; text-align: right; }
 
 /* ---- the Signal Lost dialog ---- */
 
@@ -200,6 +205,21 @@ main { width: 100%; max-width: 720px; }
 .detail .tracks { margin: 2px 0 0; padding-left: 26px; font-size: 13px; display: flex; flex-direction: column; gap: 2px; }
 .detail .tracks .by { color: var(--ink-soft); }
 
+/* The weather window. The reading itself sits on a tube panel, the same
+   phosphor display the tuner uses -- the forecast is something the set
+   receives, so it reads like the station does. */
+.wxbody { padding: 12px 14px 4px; display: flex; flex-direction: column; gap: 10px; }
+.wxbody p { margin: 0; }
+.wxbody .soft { font-size: 12px; color: var(--ink-soft); }
+.wxnow { background: var(--tube); padding: 10px 14px; font-family: 'VT323', monospace; color: var(--led); display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; }
+.wxnow .t { font-size: 44px; text-shadow: 0 0 8px var(--led); }
+.wxnow .c { font-size: 24px; color: var(--chalk); }
+.wxparts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.wxpart { background: var(--chalk); padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
+.wxpart .n { font-size: 11px; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 1px; }
+.wxpart .t { font-size: 20px; }
+.wxpart.now { outline: 2px solid var(--title); outline-offset: -2px; }
+
 .keys { width: 100%; border-collapse: collapse; font-size: 13px; }
 .keys th { text-align: left; font-size: 11px; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 1px; padding: 4px 8px; }
 .keys td { padding: 5px 8px; vertical-align: top; border-top: 1px solid var(--bone); }
@@ -221,6 +241,7 @@ kbd { display: inline-block; font: inherit; font-variant-ligatures: none; font-s
   .menu .item { padding-top: 10px; padding-bottom: 10px; }
   .menutitle { padding: 8px 9px; }
   .keys td:nth-child(3), .keys th:nth-child(3) { display: none; }
+  .wxparts { grid-template-columns: 1fr; }
   body { padding: 16px; }
   .lower { flex-direction: column; }
   .meters { width: auto; flex-direction: row; align-items: center; flex-wrap: wrap; }

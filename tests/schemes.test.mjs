@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync } from 'node:fs'
 import path from 'node:path'
-import { SCHEMES, DEFAULT_SCHEME, schemeFor } from '../schemes.js'
+import { SCHEMES, DEFAULT_SCHEME, FORCED_SCHEMES, schemeFor } from '../schemes.js'
 import { SIGNAL_DIR } from '../tools/dev-server.mjs'
 import { schemeReport } from '../tools/check-schemes.mjs'
 
@@ -21,7 +21,7 @@ const contrast = (a, b) => {
 }
 
 test('every scheme is complete, upper-case hex, and legible', () => {
-  for (const [id, s] of Object.entries({ default: DEFAULT_SCHEME, ...SCHEMES })) {
+  for (const [id, s] of Object.entries({ default: DEFAULT_SCHEME, ...SCHEMES, ...FORCED_SCHEMES })) {
     assert.ok(s.name, `${id}: name`)
     assert.match(s.title, HEX, `${id}: title`)
     assert.match(s.led, HEX, `${id}: led`)
@@ -49,7 +49,7 @@ const dE = (a, b) => Math.hypot(...lab(a).map((v, i) => v - lab(b)[i]))
 const MIN_PAIR_DISTANCE = 35
 
 test('no two schemes look alike (title and display together)', () => {
-  const all = Object.entries({ house: DEFAULT_SCHEME, ...SCHEMES })
+  const all = Object.entries({ house: DEFAULT_SCHEME, ...SCHEMES, ...FORCED_SCHEMES })
   for (let i = 0; i < all.length; i++) {
     for (let j = i + 1; j < all.length; j++) {
       const [a, sa] = all[i]
@@ -61,8 +61,18 @@ test('no two schemes look alike (title and display together)', () => {
 })
 
 test('scheme names are unique', () => {
-  const names = [DEFAULT_SCHEME, ...Object.values(SCHEMES)].map((s) => s.name)
+  const names = [DEFAULT_SCHEME, ...Object.values(SCHEMES), ...Object.values(FORCED_SCHEMES)].map((s) => s.name)
   assert.equal(new Set(names).size, names.length)
+})
+
+test('a secret station is schemed by its forced tint, generically', async () => {
+  assert.equal(schemeFor({ id: 'anything', secret: true, forcedPhosphor: 'red' }), FORCED_SCHEMES.red)
+  assert.equal(schemeFor({ id: 'anything', secret: true, forcedPhosphor: 'no-such-tint' }), DEFAULT_SCHEME)
+  if (!existsSync(path.join(SIGNAL_DIR, 'stations.js'))) return
+  const { SECRET_STATIONS } = await import(new URL(`file://${path.join(SIGNAL_DIR, 'stations.js')}`).href)
+  for (const s of SECRET_STATIONS) {
+    assert.ok(FORCED_SCHEMES[s.forcedPhosphor], `${s.id} forces '${s.forcedPhosphor}', which has no scheme here`)
+  }
 })
 
 test('an unknown station gets the house scheme, never undefined', () => {

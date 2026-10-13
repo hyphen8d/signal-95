@@ -44,4 +44,24 @@ export const SCHEMES = {
   'circuit-crush': { name: 'Night Drive', title: '#6A1F55', led: '#5CE1FF' },  // magenta dusk, dash cyan
 }
 
-export const schemeFor = (stationId) => SCHEMES[stationId] ?? DEFAULT_SCHEME
+// Secret stations (2026-10-13) are keyed by their `forcedPhosphor` -- the
+// tint SIGNAL forces on its tube while you are on one -- not by id, so
+// every secret behaviour stays generic on the station's own fields, as
+// SIGNAL's do: a secret SIGNAL adds later picks up its scheme here with no
+// new code, provided its tint is listed. Both read as departures on
+// purpose: NIN's is SIGNAL's alarm red; GREEN ROOM keeps SIGNAL's warm
+// "haze" green on the display and goes to smoke on the title bar -- the
+// first draft was olive, and sat on top of ATOMIC's olive-and-lime, which
+// would have made the catch land as nothing much happening (the trap
+// SIGNAL's own note on that tint is about). Held to the same distinctness
+// test as every other scheme.
+export const FORCED_SCHEMES = {
+  red: { name: 'Red Line', title: '#3A0606', led: '#FF2A1F' },
+  haze: { name: 'Haze', title: '#56545E', led: '#9EFF3D' },
+}
+
+/** The scheme for a station (object) or a station id (string). */
+export function schemeFor(station) {
+  if (typeof station === 'string') return SCHEMES[station] ?? DEFAULT_SCHEME
+  return SCHEMES[station?.id] ?? FORCED_SCHEMES[station?.forcedPhosphor] ?? DEFAULT_SCHEME
+}

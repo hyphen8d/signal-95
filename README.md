@@ -20,12 +20,16 @@ Everything works with the mouse, and everything has a key.
 | Mouse wheel over the dial | (Shift for fine) | Nudge the tuning |
 | Seek buttons | `↑` `↓` | Jump to the next / previous station |
 | Preset buttons | `1–9` | Tune a preset on this band |
+| Tuning → Lock On | `Enter` | Lock on to the signal in range, dead centre |
+| Station → Next Track | `N` | Skip to the next track on this station |
 | Band tabs | `B` | Switch between YM and ZM |
 | Scan | `S` | Visit each station in turn |
 | Volume slider (press, drag or wheel) | `−` `+` | Volume down / up |
 | Speaker button | `M` | Mute |
 | Right-click a preset | `Shift+F10` | Preset menu: tune, station info, copy link |
 | Station → Copy Station Link | `K` | Copy a link to the station you are on |
+| View → Lyrics | `L` | Show the words on the display, in time |
+| View → Weather | `W` | The local forecast (asks first) |
 | Guide → Station Guide | `G` | Browse the stations and their playlists |
 | Menu bar | `Alt+letter` `F10` | Open a menu (arrows move, Enter chooses, Esc closes) |
 

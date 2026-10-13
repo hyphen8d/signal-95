@@ -53,6 +53,11 @@ export async function loadRoster() {
   return {
     stations: mod.STATIONS.filter((s) => !s.secret),
     secretStations: mod.SECRET_STATIONS ?? [],
+    // SIGNAL's one reading of its instrumental opt-out (station fields
+    // `instrumental`, `vocalTracks`, `instrumentalTracks`), handed over so
+    // lyrics.js never restates those rules. Null on a SIGNAL too old to
+    // have it: every track is then treated as possibly sung.
+    trackIsInstrumental: mod.trackIsInstrumental ?? null,
     stamp,
     idClipUrl,
   }

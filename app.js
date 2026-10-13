@@ -17,6 +17,8 @@ const { CONTROLS } = await import(`./controls.js?v=${V}`)
 const mix = await import(`./mix.js?v=${V}`)
 const broadcast = await import(`./broadcast.js?v=${V}`)
 const { createSound } = await import(`./sound.js?v=${V}`)
+const { createLyrics, instrumentalIdSet, lyricLine } = await import(`./lyrics.js?v=${V}`)
+const W = await import(`./weather.js?v=${V}`)
 
 const SCAN_DWELL_MS = 6000
 const FLASH_MS = 1600
@@ -39,6 +41,9 @@ const state = {
   memory: new Map(),     // station id -> where it was when you left (broadcast.js)
   announced: new Set(),  // stations whose spoken ID has played this session
   idClipUrl: null,       // station id -> its spoken-ID clip (roster.js), or null
+  secrets: [],           // SIGNAL's secret stations: off the dial, not off the air
+  showLyrics: false,     // the display's mode: Now Playing, or the lyric crawl
+  weatherConsent: null,  // 'yes' | 'no' | null (never asked) -- the ONLY weather state saved
   duck: 1,               // the music's share under a spoken ID, 0.5..1
   scanTimer: 0,
   flash: '',
@@ -47,6 +52,7 @@ const state = {
 }
 
 let player = null
+let lyrics = null
 const sound = createSound()
 let menuBar = null
 let ctxMenu = null
@@ -61,7 +67,7 @@ function restore() {
 }
 function persist() {
   try {
-    localStorage.setItem(STORE_KEY, JSON.stringify({ band: state.band, freq: state.freq, lastFreq: state.lastFreq, muted: state.muted, volume: state.volume }))
+    localStorage.setItem(STORE_KEY, JSON.stringify({ band: state.band, freq: state.freq, lastFreq: state.lastFreq, muted: state.muted, volume: state.volume, showLyrics: state.showLyrics, weatherConsent: state.weatherConsent }))
   } catch (e) {}
 }
 
@@ -86,6 +92,7 @@ function nextTrack(station) {
 function play(track, start = 0) {
   state.track = track
   state.trackStart = start
+  if (state.showLyrics) lyrics?.ensure(track, 0)
   if (player && state.power) startTrack(track, start)
   announce(`${track.title}, ${track.artist}`, 'track')
 }
@@ -93,6 +100,16 @@ function play(track, start = 0) {
 function startTrack(track, start) {
   if (start === 0) player.load(track.youtubeId)
   else player.join(track.youtubeId, (dur) => (start === 'join' ? broadcast.joinPoint(dur) : broadcast.clampStart(start, dur)))
+}
+
+/** N / Station -> Next Track: the station moves on, so from the top (SIGNAL's
+ *  skip). Off-station it answers rather than doing nothing -- the missing
+ *  thing is the station, not the track (SIGNAL's dead-feedback fix). */
+function skipTrack() {
+  if (!state.power) { flash('Power is off'); return }
+  if (!state.station) { flash('No signal'); return }
+  play(nextTrack(state.station), 0)
+  flash('Next track')
 }
 
 /** Tuning in to a station: rejoin the broadcast where it would be now if
@@ -119,6 +136,158 @@ function remember(station) {
 function stopPlayback() {
   state.track = null
   if (player) player.stop()
+}
+
+// ---------------------------------------------------------------- lyrics
+// SIGNAL's [L]: synced lyrics from LRCLIB, ported whole in lyrics.js
+// (measured rules: search fallback, the duration gate, blank sentinels,
+// the instrumental opt-out -- see its header). SIGNAL draws them on its
+// tube; here they go on the display panel, the one surviving piece of
+// tube, as a karaoke crawl: the current line bright, the next dim.
+//
+// One deliberate difference: SIGNAL asks LRCLIB on every track change.
+// This app asks only while lyrics are showing (on the toggle, then on each
+// new track), so a listener who never opens them sends nothing anywhere.
+// The cost is a moment of "Finding the words" on first view.
+
+function toggleLyrics() {
+  state.showLyrics = !state.showLyrics
+  if (state.showLyrics && state.track) lyrics?.ensure(state.track, player?.duration() ?? 0)
+  flash(state.showLyrics ? 'Lyrics on' : 'Lyrics off')
+  persist()
+  render()
+}
+
+/** The display's two text rows in lyrics mode, or null to show Now
+ *  Playing as usual (off, between stations, nothing loaded). */
+function lyricRows() {
+  if (!state.showLyrics || !state.power || !state.station || !state.track || !lyrics) return null
+  const st = lyrics.stateFor(state.track)
+  if (st === 'pending') return ['Finding the words…', '']
+  if (st !== 'available') {
+    const why = lyrics.entryFor(state.track)?.reason
+    return [why === 'instrumental' ? 'Instrumental' : 'No lyrics for this track', '']
+  }
+  const { current, next } = lyricLine(lyrics.linesFor(state.track), player?.position() ?? 0)
+  // '' is a gap -- before the first line, or a blank tag ending a sung
+  // passage. A note, not the last line left lit (SIGNAL's sentinel rule).
+  return [current || '♪', next]
+}
+
+// ---------------------------------------------------------------- weather
+// SIGNAL's [W], as a window: the data half is weather.js (ported, with an
+// agreement test against SIGNAL's own); this is the flow SIGNAL's card
+// follows, kept step for step because each step is a lesson:
+//
+//   - Nothing is asked until you say yes, and the location prompt is
+//     raised INSIDE that click, so the browser sees a real gesture.
+//   - Only the yes/no is saved. The position and the reading live in
+//     memory and are gone on reload.
+//   - An insecure page (the tailnet's plain http) is not a refusal: the
+//     browser answers it with the same error code as a "no", and saving
+//     it as one would remember a visitor as having declined forever.
+//     weather.js returns 'insecure' for it and nothing is saved.
+//   - The background refresh (refreshDue) never runs without a location
+//     already in hand, so a timer can never raise the permission prompt.
+//
+// Like SIGNAL's card it is an aside, not a destination: a window over the
+// radio, which plays on underneath, and the temperature sits in the status
+// bar beside the clock once there is a reading.
+
+const wx = { phase: 'consent', loc: null, data: null, lastAttemptAt: 0, busy: false }
+
+function openWeather() {
+  const blocker = W.locateBlocker()
+  if (blocker) wx.phase = blocker === 'insecure' ? 'insecure' : 'nolocation'
+  else if (state.weatherConsent !== 'yes') wx.phase = 'consent'
+  else if (wx.data && !W.isStale(wx.data)) wx.phase = 'shown'
+  else refreshWeather()
+  openModal('weather', closeModal)
+  renderWeather()
+}
+
+async function refreshWeather() {
+  if (wx.busy) return
+  wx.busy = true
+  try {
+    if (!wx.loc) {
+      wx.phase = 'locating'
+      renderWeather()
+      const r = await W.requestLocation(navigator, { secure: globalThis.isSecureContext })
+      if (r === 'denied') { state.weatherConsent = 'no'; persist(); wx.phase = 'denied'; return }
+      if (r === 'insecure') { wx.phase = 'insecure'; return }
+      if (!r) { wx.phase = 'noanswer'; return }
+      wx.loc = r
+    }
+    if (!wx.data) { wx.phase = 'loading'; renderWeather() }
+    const data = await W.fetchWeather(wx.loc.lat, wx.loc.lon, W.unitsForLocale(navigator.language))
+    // A failed refresh keeps the last good reading on screen, marked stale,
+    // rather than replacing it with an error.
+    if (data) { wx.data = data; wx.phase = 'shown' } else wx.phase = wx.data ? 'shown' : 'error'
+  } finally {
+    wx.busy = false
+    wx.lastAttemptAt = Date.now()
+    renderWeather()
+    render()
+  }
+}
+
+function renderWeather() {
+  if ($('weather').hidden) return
+  const body = $('wxBody')
+  const acts = $('wxActions')
+  const p = (text, cls) => Object.assign(document.createElement('p'), { textContent: text, className: cls || '' })
+  const button = (label, fn, def) => {
+    const b = Object.assign(document.createElement('button'), { className: `btn${def ? ' def' : ''}`, textContent: label })
+    b.addEventListener('click', fn)
+    return b
+  }
+  const close = () => closeModal()
+  let title = 'Weather'
+  body.replaceChildren()
+  acts.replaceChildren()
+  const copy = { insecure: W.INSECURE_COPY, nolocation: W.NO_LOCATION_COPY, denied: W.DENIED_COPY, noanswer: W.NO_ANSWER_COPY, error: W.ERROR_COPY }[wx.phase]
+  if (wx.phase === 'consent') {
+    title = W.CONSENT_COPY.title
+    body.append(p(W.CONSENT_COPY.text))
+    acts.append(
+      button(W.CONSENT_COPY.yes, () => { state.weatherConsent = 'yes'; persist(); refreshWeather() }, true),
+      // "Not now" is not a closed door: SIGNAL shows the question again
+      // on the next open.
+      button(W.CONSENT_COPY.no, () => { state.weatherConsent = 'no'; persist(); closeModal() }),
+    )
+  } else if (wx.phase === 'locating' || wx.phase === 'loading') {
+    body.append(p(wx.phase === 'locating' ? W.LOCATING_TEXT : W.LOADING_TEXT))
+    acts.append(button('Close', close, true))
+  } else if (copy) {
+    title = copy.title
+    body.append(p(copy.text))
+    if (wx.phase === 'noanswer' || wx.phase === 'error') acts.append(button('Try Again', () => refreshWeather()))
+    acts.append(button('OK', close, true))
+  } else {
+    const v = W.buildWeatherView(wx.data, Date.now())
+    title = 'Local Weather'
+    const now = document.createElement('div')
+    now.className = 'wxnow sunken'
+    now.append(Object.assign(document.createElement('span'), { className: 't', textContent: v.current.tempText }),
+      Object.assign(document.createElement('span'), { className: 'c', textContent: v.current.conditionText }))
+    const parts = document.createElement('div')
+    parts.className = 'wxparts'
+    for (const part of v.parts) {
+      const d = document.createElement('div')
+      d.className = `wxpart sunken${part.now ? ' now' : ''}`
+      d.append(Object.assign(document.createElement('span'), { className: 'n', textContent: part.now ? `${part.label} · now` : part.label }),
+        Object.assign(document.createElement('span'), { className: 't', textContent: part.tempText }),
+        Object.assign(document.createElement('span'), { textContent: part.conditionText }),
+        Object.assign(document.createElement('span'), { className: 'soft', textContent: part.popText ? `${part.popText} chance of rain` : '' }))
+      parts.append(d)
+    }
+    body.append(now, parts,
+      p(`As of ${v.asOf}${v.sun ? ` · sunrise ${v.sun.rise}, sunset ${v.sun.set}` : ''}${v.stale ? ' · an older reading' : ''}`, 'soft'))
+    acts.append(button('Refresh', () => refreshWeather()), button('Close', close, true))
+  }
+  $('wxTitle').textContent = title
+  if (modal?.el === $('weather') && !$('weather').contains(document.activeElement)) acts.querySelector('.def')?.focus()
 }
 
 // ---------------------------------------------------------------- station IDs
@@ -175,12 +344,67 @@ function clearDuck() {
 
 // ---------------------------------------------------------------- tuning
 
-function tune(freq, { fromScan = false, deliberate = false } = {}) {
+// ---------------------------------------------------------------- secrets
+// SIGNAL's two secret stations (NIN at 613.0, GREEN ROOM at 420.0, both
+// YM) and SIGNAL's 50th-pass policy for them, which split "nearest
+// station" into three questions -- kept here as three call sites:
+//
+//   what can a sweep LAND on?      public stations only  (tune, seek, scan)
+//   what is the set PICKING UP?    public + secret       (signalNearest)
+//   what can Lock On CATCH?        public + secret       (lockOn)
+//
+// So dragging past 613.0 makes the bars climb, the S/N rise and the static
+// clear -- a carrier you can feel and cannot catch -- and the display
+// glows in that station's colour with no name on it. Stop, press Enter
+// (Tuning -> Lock On), and you have it. 0 and Shift+0 tune them directly,
+// as in SIGNAL. They are in no list, preset, guide or link, and a caught
+// secret is never restored on reload: the catch resets every visit.
+// Every behaviour keys on station.secret; only the two KEY bindings name a
+// station (SIGNAL binds its keys per station too), and they name it by
+// SIGNAL's id through the roster, so a missing one simply does nothing.
+
+const SECRET_KEYS = { 0: 'nin', ')': 'green-room' }
+
+function signalSources() {
+  return state.secrets.length ? [...state.stations, ...state.secrets] : state.stations
+}
+
+/** What the receiver is picking up here -- a secret carrier included. */
+function signalNearest() {
+  return dial.nearest(signalSources(), state.band, state.freq)
+}
+
+/** Enter / Tuning -> Lock On: snap to the carrier in range and hold it.
+ *  On a public station that just centres the dial (dead on: full music,
+ *  no static) -- useful on its own, which is why the menu item gives
+ *  nothing away. */
+function lockOn() {
+  const { station: s, dist } = signalNearest()
+  if (!s || dist >= dial.NEAR_THRESHOLD) { flash('No signal'); return }
+  if (s === state.station && state.freq === s.freq) { flash(`Already on ${s.callsign}`); return }
+  tune(s.freq, { deliberate: true, catch: s.secret ? s : null })
+}
+
+function secretTune(id) {
+  const s = state.secrets.find((x) => x.id === id)
+  if (!s) return false
+  if (s === state.station) { flash(`Already on ${s.callsign}`); return true }
+  state.band = s.band
+  tune(s.freq, { deliberate: true, catch: s })
+  return true
+}
+
+function tune(freq, { fromScan = false, deliberate = false, catch: caught = null } = {}) {
   if (!fromScan) stopScan()
   state.freq = dial.clampFreq(freq, state.band)
   state.lastFreq[state.band] = state.freq
   const { station, dist } = dial.nearest(state.stations, state.band, state.freq)
-  const locked = station && dial.isLocked(dist) ? station : null
+  let locked = station && dial.isLocked(dist) ? station : null
+  // A secret is never landed on -- only caught (lockOn, its key) -- and,
+  // once caught, held while you stay inside its lock radius. Nudge out of
+  // it and it is gone like any station.
+  const secret = caught ?? (state.station?.secret ? state.station : null)
+  if (secret && secret.band === state.band && dial.isLocked(Math.abs(secret.freq - state.freq))) locked = secret
   if (locked !== state.station) {
     if (state.power) remember(state.station)
     state.station = locked
@@ -285,7 +509,7 @@ function applyMusic(q) {
 }
 
 function currentSignal() {
-  return state.power ? dial.signalFor(dial.nearest(state.stations, state.band, state.freq).dist) : 1
+  return state.power ? dial.signalFor(signalNearest().dist) : 1
 }
 
 /** Mute or volume changed: both outputs follow at once. */
@@ -624,15 +848,19 @@ function placeMarks() {
 function render() {
   if (state.builtBand !== state.band) buildBand()
   const band = dial.bandFor(state.band)
-  const { station: near, dist } = dial.nearest(state.stations, state.band, state.freq)
+  // Everything the receiver picks up, a secret carrier included: the bars,
+  // the S/N, the static and the music level all read this q.
+  const { station: near, dist } = signalNearest()
   const q = state.power ? dial.signalFor(dist) : 0
   const s = state.station
-  const scheme = schemeFor(s?.id)
+  const scheme = schemeFor(s)
+  // The tease: near an uncaught secret, the display glows in its colour.
+  const teasing = state.power && !s && near?.secret && dist < dial.NEAR_THRESHOLD
   // On the root, not #tuner: the menus and dialogs wear the station's
   // scheme too, and the dialogs live outside the window.
   const root = document.documentElement
   root.style.setProperty('--title', scheme.title)
-  root.style.setProperty('--led', scheme.led)
+  root.style.setProperty('--led', teasing ? schemeFor(near).led : scheme.led)
   root.style.setProperty('--signal', String(q))
 
   // The mix reads the same q as every readout below (mix.js). Off is
@@ -656,8 +884,13 @@ function render() {
   const freqLine = `${state.freq.toFixed(1)} ${band.label}`
   if (!state.power) {
     setLed(`${freqLine}`, '', 'Power is off', 'Press P, or the button in the corner', '')
+  } else if (s && lyricRows()) {
+    const [cur, next] = lyricRows()
+    setLed(`${freqLine}  ${s.callsign}`, clock(player?.position() ?? 0), cur, next, `${state.track.title} — ${state.track.artist}`)
   } else if (s) {
     setLed(`${freqLine}  ${s.callsign}`, clock(player?.position() ?? 0), state.track?.title ?? '', state.track?.artist ?? '', s.tagline)
+  } else if (teasing) {
+    setLed(freqLine, '', 'Carrier', '', '')
   } else if (near && dist < dial.NEAR_THRESHOLD) {
     setLed(`${freqLine}  ${near.callsign}?`, '', 'Searching…', '', '')
   } else {
@@ -686,10 +919,13 @@ function render() {
     : s ? `Locked · ${freqLine}` : `Searching · ${freqLine}`
   $('stLink').textContent = `Link ${dial.linkSpeed(q)}`
   $('stSn').textContent = `S/N ${Math.round(q * 100)}%`
-  $('stClock').textContent = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+  const time = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+  const wxNow = wx.data ? W.buildWeatherView(wx.data, Date.now()).current.tempText : ''
+  $('stClock').textContent = wxNow ? `${wxNow} · ${time}` : time
 }
 
 function setLed(line, time, title, artist, tagline) {
+  $('led').classList.toggle('lyrics', !!lyricRows())
   $('ledFreq').textContent = line
   $('ledTime').textContent = time
   $('ledTitle').textContent = title
@@ -770,6 +1006,22 @@ function onKey(e) {
   if (e.ctrlKey || e.metaKey || e.altKey) return
   const k = e.key
   const fine = e.shiftKey ? 0.1 : 1
+  // The secret keys match the key's code, not its character: Shift+0 is
+  // ')' on a US layout and something else on many others (SIGNAL binds ')'
+  // and is US-only by accident).
+  if (e.code === 'Digit0' || e.code === 'Numpad0') {
+    if (secretTune(SECRET_KEYS[e.shiftKey ? ')' : 0])) e.preventDefault()
+    return
+  }
+  // Enter is Lock On -- except on a control where Enter already means
+  // "press this" (a button, a tab, a link).
+  if (k === 'Enter') {
+    const a = document.activeElement
+    if (a && a !== document.body && a.matches('button, a, [role=tab]')) return
+    lockOn()
+    e.preventDefault()
+    return
+  }
   if (k === 'ArrowRight') tune(state.freq + fine)
   else if (k === 'ArrowLeft') tune(state.freq - fine)
   else if (k === 'ArrowUp') seek(1)
@@ -781,6 +1033,9 @@ function onKey(e) {
   else if (k === 'b' || k === 'B') setBand(state.band === 'ym' ? 'zm' : 'ym')
   else if (k === 'g' || k === 'G') openGuide()
   else if (k === 'k' || k === 'K') copyLink(state.station)
+  else if (k === 'n' || k === 'N') skipTrack()
+  else if (k === 'l' || k === 'L') toggleLyrics()
+  else if (k === 'w' || k === 'W') openWeather()
   else if (k === '=' || k === '+') nudgeVolume(1)
   else if (k === '-' || k === '_') nudgeVolume(-1)
   else return
@@ -816,6 +1071,7 @@ function stationLink(s) {
 
 async function copyLink(s) {
   if (!s) { flash('Tune to a station to copy its link'); return }
+  if (s.secret) { flash('No link for this one — it isn’t on the dial'); return }
   const link = stationLink(s)
   let ok = false
   try {
@@ -851,6 +1107,7 @@ function menus() {
       id: 'station', label: '&Station',
       items: () => [
         { label: '&Power', shortcut: 'P', type: 'check', checked: state.power, action: togglePower },
+        { label: '&Next Track', shortcut: 'N', action: skipTrack },
         { separator: true },
         { label: 'Volume &Up', shortcut: '+', action: () => nudgeVolume(1) },
         { label: 'Volume &Down', shortcut: '−', action: () => nudgeVolume(-1) },
@@ -865,6 +1122,7 @@ function menus() {
         { label: 'Seek &Up', shortcut: '↑', action: () => seek(1) },
         { label: 'Seek &Down', shortcut: '↓', action: () => seek(-1) },
         { label: '&Scan', shortcut: 'S', type: 'check', checked: !!state.scanTimer, action: toggleScan },
+        { label: '&Lock On', shortcut: 'Enter', action: lockOn },
         { separator: true },
         ...dial.BANDS.map((b) => ({
           label: `&${b.label} Band`, shortcut: 'B', type: 'radio', checked: b.key === state.band,
@@ -895,6 +1153,13 @@ function menus() {
       },
     },
     {
+      id: 'view', label: '&View',
+      items: () => [
+        { label: '&Lyrics', shortcut: 'L', type: 'check', checked: state.showLyrics, action: toggleLyrics },
+        { label: '&Weather…', shortcut: 'W', action: openWeather },
+      ],
+    },
+    {
       id: 'guide', label: '&Guide',
       items: () => [
         { label: '&Station Guide…', shortcut: 'G', action: openGuide },
@@ -919,6 +1184,11 @@ export async function start() {
   const roster = await loadRoster()
   state.stations = roster.stations
   state.rosterStamp = roster.stamp
+  state.secrets = roster.secretStations
+  const wordless = roster.trackIsInstrumental
+    ? instrumentalIdSet([...roster.stations, ...roster.secretStations], roster.trackIsInstrumental)
+    : new Set()
+  lyrics = createLyrics({ isInstrumental: (t) => wordless.has(t.youtubeId) })
   state.idClipUrl = roster.idClipUrl
   const saved = restore()
   if (saved) {
@@ -926,6 +1196,8 @@ export async function start() {
     state.lastFreq = saved.lastFreq ?? {}
     state.muted = !!saved.muted
     if (typeof saved.volume === 'number') state.volume = mix.clampVolume(saved.volume)
+    state.showLyrics = !!saved.showLyrics
+    if (saved.weatherConsent === 'yes' || saved.weatherConsent === 'no') state.weatherConsent = saved.weatherConsent
   }
   // The bus's level before anything can sound: without this the static
   // would play at full until the YouTube player finished loading (or, with
@@ -957,9 +1229,18 @@ export async function start() {
   }
 
   setInterval(render, 1000) // the clock, the elapsed time and the buffer meter
+  // The weather's own clock: a refresh when the reading goes stale, one try
+  // a minute while it is failing, and never without a location in hand.
+  setInterval(() => { if (W.refreshDue({ wx: wx.data, loc: wx.loc, lastAttemptAt: wx.lastAttemptAt })) refreshWeather() }, 1000)
+  // Lyric lines change mid-second; a quarter-second tick, only while the
+  // crawl is up, keeps them on the beat without redrawing the rest 4x.
+  setInterval(() => { if (lyricRows()) render() }, 250)
 
   player = await createPlayer({
-    onPlaying: render,
+    // The second, informed lyrics ask: on PLAYING the real duration is
+    // known, so a match found blind at 0 is re-ranked and gated once
+    // (lyrics.js `rankedBy`). A cache hit when nothing changed.
+    onPlaying: () => { if (state.showLyrics && state.track) lyrics?.ensure(state.track, player.duration()); render() },
     onBuffering: render,
     onEnded: () => { if (state.station) play(nextTrack(state.station)) },
     onError: () => { if (state.power && state.station) openLost() },
