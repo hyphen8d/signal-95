@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <!-- The build this markup belongs to. tools/stamp.js writes it beside
      build.json; main.js reloads once if they disagree (a stale cached page). -->
-<meta name="signal95-build" content="2026-10-13.14">
+<meta name="signal95-build" content="2026-10-13.15">
 <title>SIGNAL-95</title>
 <meta name="description" content="SIGNAL-95: an internet-radio tuner in the style of a mid-90s desktop app. Sixteen curated stations across two bands.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -169,6 +169,24 @@
       </table>
     </div>
     <div class="actions"><button class="btn def" id="keysOk">OK</button></div>
+  </section>
+</div>
+
+<div id="gameWrap" hidden>
+  <section class="window raised gamewin" aria-labelledby="gameTitle">
+    <header class="titlebar">
+      <h1 id="gameTitle">VECTOR SCAN</h1>
+      <button class="btn" id="gameClose" aria-label="Close (Esc)" title="Close (Esc)">
+        <svg width="8" height="8" viewBox="0 0 8 8" aria-hidden="true"><path d="M1 1l6 6M7 1l-6 6" stroke="#2A2925" stroke-width="1.6"/></svg>
+      </button>
+    </header>
+    <div class="gamehud sunken" id="gameHud" aria-live="off"></div>
+    <div class="gamefield sunken">
+      <canvas id="gameCanvas" width="160" height="76" aria-label="VECTOR SCAN playfield" role="img"></canvas>
+      <div class="gamebanner" id="gameBanner" hidden></div>
+    </div>
+    <div class="gamemeter" id="gameMeter" aria-label="Power meter"></div>
+    <div class="gamehelp" id="gameHelp"></div>
   </section>
 </div>
 

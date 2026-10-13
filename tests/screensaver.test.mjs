@@ -52,3 +52,21 @@ test('IDLE_MS, syntheticAudio and SILENT_AUDIO agree with SIGNAL', { skip: !have
   const body = (src) => src.match(/export function syntheticAudio\(t\) \{([\s\S]*?)\n\}/)[1].replace(/\s+/g, '')
   assert.equal(body(mine), body(tap))
 })
+
+test('the Konami matcher: holds through the code, wakes on anything else', () => {
+  let p = 0
+  for (let i = 0; i < S.KONAMI.length - 1; i++) {
+    const r = S.konamiStep(p, S.KONAMI[i].length === 1 ? S.KONAMI[i].toUpperCase() : S.KONAMI[i])
+    assert.equal(r.result, 'hold', `key ${i}`)
+    p = r.progress
+  }
+  assert.equal(S.konamiStep(p, 'a').result, 'done')
+  assert.equal(S.konamiStep(0, 'p').result, 'wake', 'an ordinary key wakes the screen')
+  assert.deepEqual(S.konamiStep(3, 'ArrowUp'), { progress: 0, result: 'wake' }, 'a broken run wakes it')
+})
+
+test('KONAMI agrees with SIGNAL', { skip: !haveSignal && 'no SIGNAL checkout beside this repo' }, () => {
+  const src = readFileSync(path.join(SIGNAL_DIR, 'constants.js'), 'utf8')
+  const theirs = [...src.match(/export const KONAMI_CODE = \[([\s\S]*?)\]/)[1].matchAll(/'([^']+)'/g)].map((m) => m[1])
+  assert.deepEqual(theirs, S.KONAMI)
+})

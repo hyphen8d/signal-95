@@ -250,6 +250,31 @@ kbd { display: inline-block; font: inherit; font-variant-ligatures: none; font-s
   font-family: 'VT323', monospace; font-size: clamp(28px, 5vw, 56px); color: var(--led); text-shadow: 0 0 12px var(--led);
 }
 
+/* VECTOR SCAN, the hidden game: a window in the radio's own chrome over a
+   dimmed desk. The playfield is SIGNAL's 160x76 dot space at an integer
+   scale (set by app.js), pixel for pixel -- the era's DOS shooters looked
+   exactly like this. The power meter is a row of beveled boxes: a row of
+   labelled boxes was always the arcade original's meter, and it is the one
+   part of the game a desktop app draws better than SIGNAL's grid did. */
+#gameWrap { position: fixed; inset: 0; z-index: 35; background: rgba(18, 20, 15, 0.82); display: grid; place-items: center; padding: 12px; }
+#gameWrap[hidden] { display: none; }
+.gamewin { width: auto; max-width: none; }
+.gamewin .titlebar .btn { width: 22px; min-height: 20px; padding: 0; display: grid; place-items: center; }
+.gamehud { background: var(--tube); color: var(--led); font-family: 'VT323', monospace; font-size: 22px; display: flex; gap: 22px; padding: 4px 10px; text-shadow: 0 0 6px var(--led); white-space: nowrap; }
+.gamehud .hi { color: var(--chalk); text-shadow: none; }
+.gamefield { position: relative; background: var(--tube); padding: 4px; line-height: 0; }
+#gameCanvas { image-rendering: pixelated; display: block; }
+.gamebanner { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; gap: 6px; font-family: 'VT323', monospace; color: var(--chalk); line-height: 1.1; }
+.gamebanner[hidden] { display: none; }
+.gamebanner .big { font-size: 40px; color: var(--led); text-shadow: 0 0 10px var(--led); }
+.gamebanner .sub { font-size: 22px; }
+.gamemeter { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; padding: 6px 4px 2px; }
+.gamemeter .box { text-align: center; font-size: 12px; padding: 5px 2px; background: var(--putty); box-shadow: var(--raised); color: var(--ink-soft); white-space: nowrap; }
+.gamemeter .box.owned { color: var(--ink); font-weight: 700; }
+.gamemeter .box.cursor { background: var(--title); color: var(--chalk); box-shadow: var(--pressed); }
+.gamemeter .box.wiped { background: var(--putty-down); color: var(--muted); box-shadow: var(--pane); }
+.gamehelp { font-size: 12px; color: var(--ink-soft); padding: 2px 6px 4px; }
+
 #ytDock { position: fixed; left: -9999px; top: 0; width: 260px; height: 200px; }
 
 @media (max-width: 560px) {

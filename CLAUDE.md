@@ -101,6 +101,8 @@ identity, as in SIGNAL: one instance per full URL).
 - `lyrics.js` -- pure: SIGNAL's synced-lyrics logic, ported (agreement
   test reads SIGNAL's voice.js source for the constants and URLs).
 - `liners.js` -- pure: which liner, how often, and why the generals are out.
+- `game.js` -- pure: VECTOR SCAN's simulation, SIGNAL's, ported whole.
+  `game-sfx.js` -- its sounds. The shell is in app.js.
 - `screensaver.js` -- pure: engine per station, the idle rule, SIGNAL's
   synthetic audio. `saver-engines.js` -- the six canvas engines.
 - `weather.js` -- pure: SIGNAL's weather data half, ported (agreement test
@@ -256,6 +258,43 @@ file is the only place the keys are written down, as in SIGNAL.
 `N` / Station -> Next Track (SIGNAL's key): the next track from the top.
 Off-station it says "No signal", powered off "Power is off" -- SIGNAL's
 dead-feedback fix for the same key.
+
+### VECTOR SCAN, the hidden game (2026-10-13)
+
+SIGNAL's Gradius. **Hidden, and this file is the only place the ways in
+are written down** -- not README, not the shortcuts dialog, not
+`controls.js`, no menu item:
+
+- **The Konami code inside the screensaver** (up up down down left right
+  left right B A), the way SIGNAL hides it inside its visualizer. The
+  screensaver wakes on any key, so keys that continue the code are held
+  back instead (`konamiStep` in screensaver.js; a broken run wakes it at
+  once, a stalled one after 1.2s). The sequence is asserted equal to
+  SIGNAL's.
+- **`?game=1`**, SIGNAL's link: armed at load, it opens the game ~700ms
+  after the first power-on. A link someone who knows has to hand you --
+  which is why it is not a discovery path and must not be advertised.
+
+The simulation is SIGNAL's, ported whole into `game.js` (by a parallel
+agent): every constant, the fixed 60Hz step, the terrain ramp and the
+stage gate (`terrainAtGate`, shared by collision and drawing -- the rule
+SIGNAL's notes call the one to preserve), the chain, DIVER and ARMOR, the
+meter wipe. `tests/game.test.mjs` flies it side by side with SIGNAL's own
+game code (evaluated with its imports stubbed) on the same dice, comparing
+state and all three dot layers every step, and asserts every constant
+against SIGNAL's source. The one rule that run does not exercise is the
+gate in collision (the bot never flies where it matters); the dedicated
+pairing test guards it.
+
+The new body: SIGNAL's 160x76 dot space as pixel art at an integer scale
+(`vAspect: 1` -- square pixels, where SIGNAL corrects for tall Braille
+dots), terrain dim / hazards in the station colour / the ship bright, the
+HUD on a tube strip, the power meter as beveled boxes carrying SIGNAL's
+per-box lighting (and the wipe on a lost ship). The game owns the keyboard
+while open (P cannot power the set off mid-run); Esc or E walks out, and
+the high score (`gameHi` in the store) is committed on walking out as well
+as on game over, as SIGNAL does. Game over hands back after 5.2s. The
+radio plays on underneath; the sounds go through our bus.
 
 ### The screensaver (2026-10-13)
 
@@ -590,9 +629,7 @@ rarely changed is what keeps that harmless.
 
 A DOM test harness (everything UI-side is verified by driving headless
 Chromium over CDP; the drives live outside the repo), general liners of
-its own (see Liners), and SIGNAL's hidden game (VECTOR SCAN) -- which in
-SIGNAL is reached from inside the visualizer, and so would need its own
-answer here.
+its own (see Liners). Every SIGNAL feature is otherwise here.
 
 Deploy is GitHub Pages from `main` (live since 2026-10-12 at
 hyphen8d.github.io/signal-95): every push to main ships, so

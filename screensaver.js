@@ -96,3 +96,30 @@ export const SILENT_AUDIO = {
   onset: false,
   pulse: 0,
 }
+
+// ---- the way into the hidden game (2026-10-13) ---------------------------
+// SIGNAL's: the Konami code, typed inside its visualizer -- here, inside the
+// screensaver, which is this app's visualizer. The sequence is SIGNAL's
+// KONAMI_CODE, matched the same way (a letter lower-cased, a named key as
+// is); tests/screensaver.test.mjs asserts it against SIGNAL's constants.
+//
+// The screensaver wakes on any key, so the code needs one concession: a key
+// that CONTINUES the sequence is held back instead of waking it. A run that
+// breaks wakes it at once; a run that stalls wakes it after KONAMI_HOLD_MS.
+// The only visible cost is that an arrow key used to wake the screen does
+// so a moment late -- which nobody waiting for a screen to wake can tell
+// from the screen being slow.
+export const KONAMI = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'b', 'a']
+export const KONAMI_HOLD_MS = 1200
+
+/** One key into the matcher. Returns { progress, result }: result is
+ *  'done' (the whole code), 'hold' (part-way, keep waiting) or 'wake'
+ *  (not part of the code: wake the screen). */
+export function konamiStep(progress, key) {
+  const k = key.length === 1 ? key.toLowerCase() : key
+  if (k === KONAMI[progress]) {
+    const next = progress + 1
+    return next === KONAMI.length ? { progress: 0, result: 'done' } : { progress: next, result: 'hold' }
+  }
+  return { progress: 0, result: 'wake' }
+}

@@ -13,9 +13,9 @@ const V = globalThis.SIGNAL95_BUILD ?? ''
 // live site, 7 of the 12 seconds before the set answered a single key. The
 // URLs are unchanged (same `?v=`), so module identity is too.
 const [dial, schemes, { loadRoster }, { createPlayer }, menusMod, { CONTROLS }, mix, broadcast,
-  { createSound }, lyricsMod, W, liners, SV, { ENGINE_FACTORIES }] = await Promise.all(
+  { createSound }, lyricsMod, W, liners, SV, { ENGINE_FACTORIES }, G, { buildGameSound }] = await Promise.all(
   ['dial', 'schemes', 'roster', 'player', 'menus', 'controls', 'mix', 'broadcast',
-    'sound', 'lyrics', 'weather', 'liners', 'screensaver', 'saver-engines']
+    'sound', 'lyrics', 'weather', 'liners', 'screensaver', 'saver-engines', 'game', 'game-sfx']
     .map((m) => import(`./${m}.js?v=${V}`)))
 const { schemeFor, SCHEMES } = schemes
 const { createMenuBar, createContextMenu } = menusMod
@@ -48,6 +48,7 @@ const state = {
   showLyrics: false,     // the display's mode: Now Playing, or the lyric crawl
   weatherConsent: null,  // 'yes' | 'no' | null (never asked) -- the ONLY weather state saved
   saverIdle: null,       // start the screensaver after idle? null = the default (see start())
+  gameHi: 0,             // VECTOR SCAN's high score -- the game's one persistent trace
   duck: 1,               // the music's share under a spoken ID, 0.5..1
   sleepMinutes: 0,       // the sleep timer's step: 0 (off), 60, 30, 15
   sleepUntil: null,      // its deadline (a deadline, not a countdown -- see tickSleep)
@@ -59,6 +60,8 @@ const state = {
 }
 
 let player = null
+// SIGNAL's ?game=1: a link that arms the hidden game for the next power-on.
+let gameArmed = new URLSearchParams(location.search).get('game') === '1'
 let lyrics = null
 const sound = createSound()
 let menuBar = null
@@ -74,7 +77,7 @@ function restore() {
 }
 function persist() {
   try {
-    localStorage.setItem(STORE_KEY, JSON.stringify({ band: state.band, freq: state.freq, lastFreq: state.lastFreq, muted: state.muted, volume: state.volume, showLyrics: state.showLyrics, weatherConsent: state.weatherConsent, saverIdle: state.saverIdle }))
+    localStorage.setItem(STORE_KEY, JSON.stringify({ band: state.band, freq: state.freq, lastFreq: state.lastFreq, muted: state.muted, volume: state.volume, showLyrics: state.showLyrics, weatherConsent: state.weatherConsent, saverIdle: state.saverIdle, gameHi: state.gameHi }))
   } catch (e) {}
 }
 
@@ -202,6 +205,8 @@ function startSaver() {
 
 function stopSaver() {
   if (!saver.active) return
+  clearTimeout(saver.konamiTimer)
+  saver.konami = 0
   saver.active = false
   cancelAnimationFrame(saver.raf)
   saver.engine = null
@@ -258,7 +263,21 @@ function wireSaverInput() {
     e.stopImmediatePropagation()
     if (Date.now() - saver.startedAt >= SAVER_GRACE_MS) stopSaver()
   }
-  for (const type of ['keydown', 'pointerdown', 'wheel', 'touchstart']) window.addEventListener(type, wake, { capture: true, passive: false })
+  for (const type of ['pointerdown', 'wheel', 'touchstart']) window.addEventListener(type, wake, { capture: true, passive: false })
+  // Keys go through the Konami matcher first (screensaver.js): a key that
+  // continues the code is held back; anything else wakes the screen as usual.
+  window.addEventListener('keydown', (e) => {
+    if (!saver.active) { lastInputAt = Date.now(); return }
+    e.preventDefault()
+    e.stopImmediatePropagation()
+    if (Date.now() - saver.startedAt < SAVER_GRACE_MS) return
+    clearTimeout(saver.konamiTimer)
+    const r = SV.konamiStep(saver.konami ?? 0, e.key)
+    saver.konami = r.progress
+    if (r.result === 'done') { stopSaver(); openGame(); return }
+    if (r.result === 'hold') { saver.konamiTimer = setTimeout(() => { saver.konami = 0; stopSaver() }, SV.KONAMI_HOLD_MS); return }
+    stopSaver()
+  }, true)
   // A real movement, not a twitch: the first pointermove after starting is
   // where the hand already was, so it only sets the reference point.
   window.addEventListener('pointermove', (e) => {
@@ -273,6 +292,163 @@ function toggleSaverIdle() {
   state.saverIdle = !state.saverIdle
   persist()
   flash(state.saverIdle ? 'Screensaver after idle: on' : 'Screensaver after idle: off')
+}
+
+// ---------------------------------------------------------------- VECTOR SCAN
+// SIGNAL's hidden game (its game.js). The simulation is ported whole in
+// game.js -- tuned over several passes, and not ours to re-tune -- and this
+// is its new body: SIGNAL's 160x76 dot space as pixel art on a canvas, the
+// HUD on a tube strip, the power meter as beveled boxes, sounds through our
+// bus (game-sfx.js), the radio still playing underneath.
+//
+// HIDDEN, as in SIGNAL, and the difference is the point: nothing on screen
+// leads here -- no menu item, no legend, no README line, not in the
+// shortcuts dialog. The ways in are the Konami code inside the screensaver
+// (this app's visualizer, where SIGNAL hides it) and ?game=1, which arms it
+// for the next power-on: a link someone who already knows has to hand you.
+// This file and CLAUDE.md are the only places either is written down.
+
+// Keys -> the game's actions (SIGNAL's own bindings; see game.js). The
+// arrows, plus WASD for a left hand that would rather not.
+const GAME_HELD = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', KeyW: 'up', KeyS: 'down', KeyA: 'left', KeyD: 'right', KeyZ: 'fire', Space: 'fire' }
+const GAME_PRESSED = { KeyZ: 'fire', Space: 'fire', Enter: 'power', NumpadEnter: 'power' }
+
+const game = { open: false, sim: null, raf: 0, last: 0, held: new Set(), pressed: new Set(), layers: null, img: null, scale: 3 }
+
+function openGame() {
+  if (game.open) return
+  menuBar?.close()
+  ctxMenu?.close()
+  if (modal) closeModal({ restore: false })
+  // vAspect 1: SIGNAL corrects vertical speed for its font's tall Braille
+  // dots (1.125); these are square pixels.
+  game.sim = G.createGame({ hiScore: state.gameHi, vAspect: 1 })
+  game.layers = { terrain: new Uint8Array(G.W * G.H), hazards: new Uint8Array(G.W * G.H), player: new Uint8Array(G.W * G.H) }
+  const c = $('gameCanvas')
+  game.img = c.getContext('2d').createImageData(G.W, G.H)
+  game.held.clear()
+  game.pressed.clear()
+  $('gameWrap').hidden = false
+  sizeGame()
+  buildMeter()
+  $('gameHelp').textContent = 'Arrows move · Space or Z fires · Enter powers up · Esc leaves'
+  game.open = true
+  game.last = performance.now()
+  game.raf = requestAnimationFrame(gameFrame)
+  announce('VECTOR SCAN', 'game')
+}
+
+function closeGame() {
+  if (!game.open) return
+  // SIGNAL commits the high score on walking out too: a record that only
+  // counted when you died would keep the bad runs and lose the good ones.
+  saveGameHi()
+  game.open = false
+  cancelAnimationFrame(game.raf)
+  game.sim = null
+  $('gameWrap').hidden = true
+  lastInputAt = Date.now()
+}
+
+function saveGameHi() {
+  const hi = game.sim?.hiScore?.() ?? 0
+  if (hi > state.gameHi) { state.gameHi = hi; persist() }
+}
+
+/** The biggest whole-number scale that fits: pixel art at a fractional
+ *  scale shimmers as it scrolls. */
+function sizeGame() {
+  const s = Math.max(1, Math.min(Math.floor((innerWidth - 48) / G.W), Math.floor((innerHeight - 190) / G.H)))
+  game.scale = s
+  const c = $('gameCanvas')
+  c.style.width = `${G.W * s}px`
+  c.style.height = `${G.H * s}px`
+}
+
+function buildMeter() {
+  const m = $('gameMeter')
+  m.replaceChildren(...G.POWERS.map((p) => Object.assign(document.createElement('div'), { className: 'box', textContent: p })))
+}
+
+function gameFrame(now) {
+  if (!game.open) return
+  const dt = (now - game.last) / 1000
+  game.last = now
+  game.sim.step(dt, { held: game.held, pressed: game.pressed })
+  game.pressed.clear()
+  for (const ev of game.sim.drainEvents()) sound.game(buildGameSound, ev)
+  drawGame()
+  const hud = game.sim.hud()
+  if (hud.over) saveGameHi()
+  // SIGNAL hands the screen back on its own 5.2s after GAME OVER; the way
+  // back in is the code again, as it was the first time.
+  if (hud.done) { closeGame(); return }
+  game.raf = requestAnimationFrame(gameFrame)
+}
+
+function drawGame() {
+  const L = game.layers
+  L.terrain.fill(0); L.hazards.fill(0); L.player.fill(0)
+  game.sim.raster(L)
+  // SIGNAL's three layers and their order: terrain dim, hazards normal, the
+  // player brightest, so the ship is never lost in the scenery. Colours are
+  // the station's -- the game is something the set is receiving.
+  const sc = schemeFor(state.station)
+  const [tr, tg, tb] = rgbOf(sc.led)
+  const d = game.img.data
+  for (let i = 0; i < L.terrain.length; i++) {
+    let r = 18, g = 20, b = 15
+    if (L.player[i]) { r = 244; g = 242; b = 236 } else if (L.hazards[i]) { r = tr; g = tg; b = tb } else if (L.terrain[i]) { r = tr * 0.38; g = tg * 0.38; b = tb * 0.38 }
+    d[i * 4] = r; d[i * 4 + 1] = g; d[i * 4 + 2] = b; d[i * 4 + 3] = 255
+  }
+  $('gameCanvas').getContext('2d').putImageData(game.img, 0, 0)
+
+  const h = game.sim.hud()
+  const pad = (n) => String(n).padStart(7, '0')
+  // SIGNAL's HUD row, as text on a tube strip: HI brightens while you are
+  // beating it, the stage carries its 14-block progress bar, and CHAIN shows
+  // only when it is worth showing (bright at the cap of 8).
+  const blocks = Math.round(h.progress * 14)
+  const bar = `${'█'.repeat(blocks)}${'░'.repeat(14 - blocks)}`
+  const hud = `SCORE ${pad(h.score)}  <span class="${h.beating ? '' : 'hi'}">HI ${pad(h.hi)}</span>  SHIPS ${h.lives}`
+    + `  <span class="${h.stageFlash ? 'hi' : ''}">STAGE ${h.stage} ${bar}</span>${h.chainShown ? `  <span class="${h.chainMax ? 'hi' : ''}">CHAIN x${h.chain}</span>` : ''}`
+  if ($('gameHud').innerHTML !== hud) $('gameHud').innerHTML = hud
+  // The meter: SIGNAL's lighting per box, as box styles. During the wipe on
+  // a lost ship the boxes empty left to right: held (still yours), going
+  // (the one being taken), gone.
+  const boxes = $('gameMeter').children
+  const cls = { armed: 'cursor', going: 'cursor', owned: 'owned', held: 'owned', gone: 'wiped', empty: '' }
+  for (let i = 0; i < boxes.length; i++) {
+    const st = h.meter.boxes?.[i]?.state ?? 'empty'
+    const want = `box ${cls[st] ?? ''}`.trim()
+    if (boxes[i].className !== want) boxes[i].className = want
+  }
+  $('gameHelp').textContent = h.meter.hint ? 'Enter: power up · Arrows move · Space or Z fires · Esc leaves' : 'Arrows move · Space or Z fires · Enter powers up · Esc leaves'
+  const banner = $('gameBanner')
+  const lines = h.over
+    ? ['GAME OVER', `SCORE ${pad(h.score)}`, h.newHi ? 'NEW RECORD' : `HI ${pad(h.hiAtStart)}`]
+    : h.banner ? [h.banner.text, h.banner.sub, h.banner.bonus].filter(Boolean) : null
+  banner.hidden = !lines
+  if (lines) {
+    const html = `<div class="big">${lines[0]}</div>${lines.slice(1).map((l) => `<div class="sub">${l}</div>`).join('')}`
+    if (banner.innerHTML !== html) banner.innerHTML = html
+  }
+}
+
+const rgbOf = (hex) => { const n = parseInt(hex.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255] }
+
+/** The game owns the keyboard while it is open: nothing reaches the radio
+ *  (P must not power the set off mid-run). Esc or E walks out. */
+function gameKey(e, down) {
+  if (!game.open) return false
+  e.preventDefault()
+  e.stopImmediatePropagation()
+  if (!down) { const a = GAME_HELD[e.code]; if (a) game.held.delete(a); return true }
+  if (e.key === 'Escape' || e.code === 'KeyE') { closeGame(); return true }
+  const a = GAME_HELD[e.code]
+  if (a) game.held.add(a)
+  if (!e.repeat) { const p = GAME_PRESSED[e.code]; if (p) game.pressed.add(p) }
+  return true
 }
 
 // ---------------------------------------------------------------- sleep timer
@@ -688,6 +864,10 @@ function togglePower() {
   // The power key is a user gesture -- the moment an AudioContext may start.
   if (state.power) sound.start()
   if (state.power && state.station) { sound.handshake(); tuneIn(state.station); stationId(state.station, false) }
+  // ?game=1 (SIGNAL's link): armed at load, spent on the first power-on.
+  // ~700ms, as in SIGNAL: the set boots and finds its station first, so
+  // the game opens over a radio that is already playing.
+  if (state.power && gameArmed) { gameArmed = false; setTimeout(() => { if (state.power) openGame() }, 700) }
   if (!state.power) { stopSaver(); stopScan(); clearSleep(); sound.cancelHandshake(); sound.cancelIdent(); clearDuck(); remember(state.station); stopPlayback() }
   announce(state.power ? 'Power on' : 'Power off', 'power')
   render()
@@ -786,9 +966,10 @@ function drawVolume() {
 const focusables = (el) => [...el.querySelectorAll('button, a[href], [tabindex="0"]')].filter((f) => !f.disabled)
 
 function openModal(id, onEscape) {
-  // A dialog is never hidden behind the screensaver -- Signal Lost can
-  // arrive while it is up.
+  // A dialog is never hidden behind the screensaver or the game -- Signal
+  // Lost can arrive while either is up.
   stopSaver()
+  closeGame()
   if (modal) closeModal({ restore: false })
   menuBar?.close()
   ctxMenu?.close()
@@ -1453,10 +1634,17 @@ export async function start() {
     state.showLyrics = !!saved.showLyrics
     if (saved.weatherConsent === 'yes' || saved.weatherConsent === 'no') state.weatherConsent = saved.weatherConsent
     if (typeof saved.saverIdle === 'boolean') state.saverIdle = saved.saverIdle
+    if (Number.isFinite(saved.gameHi)) state.gameHi = saved.gameHi
   }
   // Idle start defaults on -- the era's behaviour -- except for anyone
   // whose system asks for reduced motion, who has to ask for it.
   if (state.saverIdle === null) state.saverIdle = !reducedMotion
+  // The game's keys, first of all (capture, ahead of the screensaver and the
+  // radio): while it is open it owns the keyboard.
+  window.addEventListener('keydown', (e) => { if (gameKey(e, true)) lastInputAt = Date.now() }, true)
+  window.addEventListener('keyup', (e) => gameKey(e, false), true)
+  window.addEventListener('blur', () => game.held.clear())
+  window.addEventListener('resize', () => { if (game.open) sizeGame() })
   wireSaverInput()
   // The bus's level before anything can sound: without this the static
   // would play at full until the YouTube player finished loading (or, with
@@ -1496,7 +1684,7 @@ export async function start() {
   setInterval(() => { if (lyricRows()) render() }, 250)
   setInterval(() => {
     if (SV.shouldIdleStart({ enabled: state.saverIdle, active: saver.active, power: state.power, tuned: !!state.station,
-      blocked: !!modal || !!menuBar?.isOpen() || !!ctxMenu?.isOpen(), now: Date.now(), lastInputAt })) startSaver()
+      blocked: !!modal || game.open || !!menuBar?.isOpen() || !!ctxMenu?.isOpen(), now: Date.now(), lastInputAt })) startSaver()
   }, 1000)
   // A quarter-second sleep tick so the 30s fade is a slope, not 30 steps.
   setInterval(tickSleep, 250)

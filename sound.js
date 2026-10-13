@@ -369,6 +369,12 @@ export function createSound() {
       }
       return clips.get(url)
     },
+    /** One of the game's sounds (game-sfx.js builds it), on our bus -- under
+     *  the same volume and mute as everything else. */
+    game(build, name) {
+      if (!ctx) return
+      try { build(ctx, master, ctx.currentTime + 0.005, name) } catch (e) {}
+    },
     /** For checks: the static level last asked for. */
     staticTarget: () => level,
   }
