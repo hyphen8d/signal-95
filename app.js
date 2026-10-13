@@ -14,6 +14,8 @@ const { loadRoster } = await import(`./roster.js?v=${V}`)
 const { createPlayer } = await import(`./player.js?v=${V}`)
 const { createMenuBar } = await import(`./menus.js?v=${V}`)
 const { CONTROLS } = await import(`./controls.js?v=${V}`)
+const mix = await import(`./mix.js?v=${V}`)
+const { createSound } = await import(`./sound.js?v=${V}`)
 
 const SCAN_DWELL_MS = 6000
 const FLASH_MS = 1600
@@ -38,6 +40,7 @@ const state = {
 }
 
 let player = null
+const sound = createSound()
 let menuBar = null
 let modal = null       // { el, onEscape, returnTo } while a dialog is up
 
@@ -92,8 +95,9 @@ function tune(freq, { fromScan = false } = {}) {
     state.station = locked
     if (locked) {
       announce(`${locked.callsign}, ${locked.freq.toFixed(1)}`, 'station')
-      if (state.power) play(nextTrack(locked))
+      if (state.power) { sound.handshake(); play(nextTrack(locked)) }
     } else {
+      sound.cancelHandshake()
       stopPlayback()
     }
   }
@@ -139,8 +143,10 @@ function stopScan() {
 
 function togglePower() {
   state.power = !state.power
-  if (state.power && state.station) play(nextTrack(state.station))
-  if (!state.power) { stopScan(); stopPlayback() }
+  // The power key is a user gesture -- the moment an AudioContext may start.
+  if (state.power) sound.start()
+  if (state.power && state.station) { sound.handshake(); play(nextTrack(state.station)) }
+  if (!state.power) { stopScan(); sound.cancelHandshake(); stopPlayback() }
   announce(state.power ? 'Power on' : 'Power off', 'power')
   render()
 }
@@ -148,6 +154,7 @@ function togglePower() {
 function toggleMute() {
   state.muted = !state.muted
   player?.setMuted(state.muted)
+  sound.setMuted(state.muted)
   announce(state.muted ? 'Muted' : 'Sound on', 'mute')
   persist()
   render()
@@ -450,6 +457,11 @@ function render() {
   root.style.setProperty('--led', scheme.led)
   root.style.setProperty('--signal', String(q))
 
+  // The mix reads the same q as every readout below (mix.js). Off is
+  // silence: q is 0 there, which would otherwise mean full static.
+  sound.setStatic(state.power ? mix.staticLevel(q) : 0)
+  player?.setVolume(mix.musicVolume(q))
+
   $('title').textContent = s ? `SIGNAL-95 — ${s.callsign}` : 'SIGNAL-95'
   $('power').setAttribute('aria-pressed', String(state.power))
   $('mute').setAttribute('aria-pressed', String(state.muted))
@@ -642,6 +654,7 @@ export async function start() {
     state.band = dial.bandFor(saved.band).key
     state.lastFreq = saved.lastFreq ?? {}
     state.muted = !!saved.muted
+    sound.setMuted(state.muted)
   }
   wireMouse()
   // A scan keeps running under an open menu: the Scan item's check mark
@@ -666,6 +679,7 @@ export async function start() {
     onError: () => { if (state.power && state.station) openLost() },
   })
   player.setMuted(state.muted)
+  player.setVolume(mix.musicVolume(state.power ? dial.signalFor(dial.nearest(state.stations, state.band, state.freq).dist) : 1))
   // Powered on and locked before the API finished loading: play() kept the
   // track but had no player to hand it to.
   if (state.power && state.track) player.load(state.track.youtubeId)

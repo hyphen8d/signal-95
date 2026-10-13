@@ -96,6 +96,8 @@ identity, as in SIGNAL: one instance per full URL).
 - `schemes.js` -- per-station title-bar and display colours; pure.
 - `roster.js` -- fetches SIGNAL's stamp, imports SIGNAL's stations.js.
 - `player.js` -- the YouTube IFrame player (same vars as SIGNAL's).
+- `mix.js` -- pure: static level and music volume from the signal value.
+- `sound.js` -- WebAudio: the line-noise bed, the lock handshake, mute.
 - `tools/dev-server.mjs` -- see below.
 
 **Tuning distance is one shared quantity**, as in SIGNAL: `signalFor()`
@@ -155,6 +157,37 @@ Three choices worth keeping:
   `--accent` on `#guideDetail`; the list's highlight stays in the playing
   station's colours.
 
+### The sound (2026-10-13)
+
+Between stations you hear **line noise** -- noise band-limited to a phone
+line's 300-3400Hz with a faint crackle -- and when a station locks, a
+~0.9s **handshake**: an answer tone, a warble of data, a hiss settling.
+That second is about how long the YouTube player takes to start anyway,
+so it fills a silence rather than adding a delay. Everything is
+synthesized (`sound.js`); no recording of any real modem or product is
+used or imitated note for note.
+
+- **One number drives the mix**, as in SIGNAL: `mix.js` turns
+  `signalFor()` into the static's gain and the music's player volume, so
+  the sound agrees with the bars and the S/N by construction. Locked dead
+  on: music 100, static 0. Lock edge: music 70, static nearly gone.
+  Between stations: no music, static at `STATIC_MAX` (0.12 -- SIGNAL's
+  own ceiling is 0.1 on similar noise). `tests/dial.test.mjs` holds the
+  cross-fade's direction.
+- **The music is not in the WebAudio graph** -- it is YouTube's iframe --
+  so its level is `player.setVolume()` and the static is a gain on our own
+  bus. Mute has to reach both (`toggleMute`).
+- **The AudioContext starts on power-on** (a user gesture), and is reused
+  across power cycles. Before that no context exists at all.
+- **A lost lock cuts the handshake** (`cancelHandshake`, a 50ms fade), so
+  sweeping across a station gives a chirp, not a full second of modem.
+
+Measured in Chromium (offline renders, and an analyser on the live
+output): static at full is about -29 dBFS RMS -- texture under music that
+sits near -14 -- falling to -40 near a station and -63 just inside
+lock; the handshake peaks at -19 dBFS. **Nobody has listened to it on
+real speakers yet**; that is the check that matters.
+
 ### The dev server mounts two repos
 
 `/signal-95/` is this repo and `/signal/` is SIGNAL's checkout -- the
@@ -207,11 +240,18 @@ and deleting the dot rule were both checked to turn the suite red.
   `text: '\r'` or the browser never turns it into a button click -- the
   first drive reported "Enter on OK does nothing", which was the harness.
   Alt+letter needs `modifiers: 1` and the right `code`.
+- **Measuring audio headlessly has two traps.** Headless Chrome cannot
+  play YouTube, so powering on opens Signal Lost, the modal swallows every
+  key after it, and a "tune and measure" run measures one station six
+  times -- block `*youtube.com*` (`Network.setBlockedURLs`) so no player
+  exists. And an analyser tap hooked on "the first node connected to a
+  destination" will catch an OfflineAudioContext's if one ran first in the
+  page: the first live measurement read silence everywhere for exactly
+  that reason. Prove the probe hears a test tone before trusting silence.
 
 ## Not built yet
 
-The right-click preset menu, volume control, static/handshake audio between
-stations, station IDs, lyrics, weather, the secret stations (handed over
+The right-click preset menu, volume control, station IDs, lyrics, weather, the secret stations (handed over
 by `roster.js` as `secretStations`, not on the dial -- they must stay
 generic on `station.secret`, as in SIGNAL), mid-song joins, persistence
 beyond band/frequency/mute, a DOM test harness, and deploy (Pages from

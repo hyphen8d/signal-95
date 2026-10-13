@@ -72,3 +72,24 @@ test('BANDS and thresholds agree with SIGNAL', { skip: !existsSync(path.join(SIG
   assert.equal(Number(src.match(/export const LOCK_THRESHOLD = ([\d.]+)/)[1]), dial.LOCK_THRESHOLD)
   assert.equal(Number(src.match(/export const NEAR_THRESHOLD = ([\d.]+)/)[1]), dial.NEAR_THRESHOLD)
 })
+
+test('the mix: static and music cross-fade on the one signal value', async () => {
+  const mix = await import('../mix.js')
+  assert.equal(mix.staticLevel(1), 0, 'dead on: no static')
+  assert.equal(mix.staticLevel(0), mix.STATIC_MAX, 'nothing: full static')
+  assert.equal(mix.musicVolume(1), 100)
+  assert.equal(mix.musicVolume(dial.LOCK_SIGNAL), 70)
+  assert.equal(mix.musicVolume(dial.signalFor(dial.LOCK_THRESHOLD)), 70, 'lock edge is the quietest the music gets')
+  let prevS = Infinity
+  let prevM = -Infinity
+  for (let d = dial.NEAR_THRESHOLD; d >= 0; d -= 0.1) {
+    const q = dial.signalFor(d)
+    assert.ok(mix.staticLevel(q) <= prevS + 1e-12, `static rose tuning in, at ${d}`)
+    assert.ok(mix.musicVolume(q) >= prevM, `music fell tuning in, at ${d}`)
+    prevS = mix.staticLevel(q)
+    prevM = mix.musicVolume(q)
+  }
+  // At the lock edge the static has nearly gone: the music should not
+  // arrive under a wall of noise.
+  assert.ok(mix.staticLevel(dial.LOCK_SIGNAL) < mix.STATIC_MAX * 0.1)
+})

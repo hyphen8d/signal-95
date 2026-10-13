@@ -61,10 +61,13 @@ export function nearest(stations, bandKey, freq) {
  *  link speed all read it, so what you see and read agree by construction.
  *  Add a new readout by reading this, never by measuring distance again. */
 export function signalFor(dist) {
-  if (dist <= LOCK_THRESHOLD) return 1 - (dist / LOCK_THRESHOLD) * 0.15
+  if (dist <= LOCK_THRESHOLD) return 1 - (dist / LOCK_THRESHOLD) * (1 - LOCK_SIGNAL)
   if (dist >= NEAR_THRESHOLD) return 0
-  return 0.85 * (1 - (dist - LOCK_THRESHOLD) / (NEAR_THRESHOLD - LOCK_THRESHOLD))
+  return LOCK_SIGNAL * (1 - (dist - LOCK_THRESHOLD) / (NEAR_THRESHOLD - LOCK_THRESHOLD))
 }
+
+/** signalFor() at the edge of lock: anything at or above this is locked. */
+export const LOCK_SIGNAL = 0.85
 
 export const isLocked = (dist) => dist <= LOCK_THRESHOLD
 

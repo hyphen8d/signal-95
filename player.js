@@ -12,6 +12,7 @@ export function createPlayer({ onPlaying, onBuffering, onEnded, onError }) {
         load: (youtubeId) => yt.loadVideoById(youtubeId),
         stop: () => yt.stopVideo(),
         setMuted: (m) => (m ? yt.mute() : yt.unMute()),
+        setVolume: (v) => yt.setVolume(v),
         position: () => yt.getCurrentTime?.() ?? 0,
         loadedFraction: () => yt.getVideoLoadedFraction?.() ?? 0,
       }
