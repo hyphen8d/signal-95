@@ -37,7 +37,7 @@ Everything works with the mouse, and everything has a key.
 | Speaker button | `M` | Mute |
 | Station → Sleep timer | `T` | Sleep in 60, 30, 15 minutes, or off; fades out, then switches off |
 | Right-click a preset | `Shift+F10` | Preset menu: tune, station info, copy link |
-| Station → Copy Station Link | `K` | Copy a link to the station you are on |
+| Station → Share What’s Playing | `K` | Copy the song, the station and a link that plays it |
 | View → Lyrics | `L` | Show the words on the display, in time |
 | View → Weather | `W` | The local forecast (asks first) |
 | View → Screensaver | `V` | Screensaver now (any key or mouse movement returns) |

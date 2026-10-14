@@ -245,6 +245,26 @@ scenario('a stale cached page reloads once', async (p, base) => {
   check(reloads === 1, `expected exactly one reload, saw ${reloads}: ${p.navs.join(' -> ')}`)
 }, { staleIndex: true })
 
+scenario('K shares the song, and the link plays it', async (p, base) => {
+  await p.browser.send('Browser.grantPermissions', { origin: new URL(base).origin, permissions: ['clipboardReadWrite', 'clipboardSanitizedWrite'], browserContextId: p.browserContextId })
+  await p.goto(base)
+  await p.key('p'); await sleep(1500)
+  await p.key('k'); await sleep(300)
+  const text = await p.ev(`navigator.clipboard.readText()`)
+  const [line, url, extra] = text.split('\n')
+  const call = (await p.text('title')).replace('SIGNAL-95 — ', '')
+  const title = await p.text('ledTitle')
+  const playing = await p.ev(`window.__player.vid`)
+  check(line === `${call} on SIGNAL-95 — ${title} by ${await p.text('ledArtist')}`, `the line: "${line}"`)
+  check(!extra && new URL(url).searchParams.get('track') === playing, `the link is not last, or names the wrong track: ${url} (playing ${playing})`)
+  // Follow it, as the person it was sent to would.
+  await p.goto(url)
+  await p.key('p'); await sleep(1200)
+  const cued = await p.ev(`(window.__yt.find((l) => /^(cue|load) /.test(l)) || '').split(' ')[1]`)
+  check(cued === playing, `the link cued ${cued}, not the shared ${playing}`)
+  return line
+})
+
 scenario('phone toolbar: two rows, nothing stranded', async (p, base) => {
   await p.goto(base)
   const rows = await p.ev(`(() => { const top = (s) => Math.round(document.querySelector(s).getBoundingClientRect().top); return { seek: top('#seekDown'), vol: top('#volume'), mute: top('#mute'), presets: top('#presets') } })()`)

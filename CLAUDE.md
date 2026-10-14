@@ -471,6 +471,24 @@ level with SIGNAL's clip as shipped. Driven live against a fake player
 (duck 70 -> 35 -> 70; no repeat on a seek back; a pending voice dropped
 by a quick re-tune). **Not yet heard on real speakers.**
 
+### Sharing what is playing (2026-10-13)
+
+`K` (Station -> Share What's Playing) is SIGNAL's [K] TAG: it copies a
+line a person can read -- "COLD WAVE on SIGNAL-95 — Take On Me by a-ha" --
+then the link, `?station=<id>&track=<youtubeId>`, alone on the last line.
+`share.js` holds the format and SIGNAL's reasons for it (the share card is
+one static picture, so this line is the only thing that can say what is
+playing; never first person; the URL last and bare). Off or still cueing,
+it shares the station alone; the preset menu's Copy Station Link is
+always station-only; a secret station refuses.
+
+On arrival `readShareLink` lands on the station, and `tuneIn` plays the
+named song, once, joined part-way through, if it is still on that
+station -- a dropped track falls back to the shuffle rather than
+refusing (SIGNAL's rule: a link outlives a curation pass). The drive's
+share scenario copies, reads the clipboard back, follows the link and
+checks the shared song is the one cued; ignoring `&track=` turns it red.
+
 ### The preset menu and station links (2026-10-13)
 
 Right-click a preset (or Shift+F10 / the Menu key on a focused one):
@@ -489,8 +507,7 @@ and an item that only promised one would be a dead entry.
 - **`?station=<id>`** lands on that station, over wherever you left the
   dial -- the same parameter SIGNAL reads, so a link moves between the two
   radios by swapping the path. An unknown id (renamed, secret) boots
-  normally rather than refusing. `K` (SIGNAL's key) or Station → Copy
-  Station Link copies the current one.
+  normally rather than refusing. See "Sharing what is playing" for `K`.
 - Copying falls back from `navigator.clipboard` (secure contexts only --
   the tailnet address is plain http) to a selected textarea.
 

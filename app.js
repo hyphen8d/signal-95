@@ -13,9 +13,9 @@ const V = globalThis.SIGNAL95_BUILD ?? ''
 // live site, 7 of the 12 seconds before the set answered a single key. The
 // URLs are unchanged (same `?v=`), so module identity is too.
 const [dial, schemes, { loadRoster }, { createPlayer }, menusMod, { CONTROLS }, mix, broadcast,
-  { createSound }, lyricsMod, W, liners, SV, { ENGINE_FACTORIES }, G, { buildGameSound }] = await Promise.all(
+  { createSound }, lyricsMod, W, liners, SV, { ENGINE_FACTORIES }, G, { buildGameSound }, share] = await Promise.all(
   ['dial', 'schemes', 'roster', 'player', 'menus', 'controls', 'mix', 'broadcast',
-    'sound', 'lyrics', 'weather', 'liners', 'screensaver', 'saver-engines', 'game', 'game-sfx']
+    'sound', 'lyrics', 'weather', 'liners', 'screensaver', 'saver-engines', 'game', 'game-sfx', 'share']
     .map((m) => import(`./${m}.js?v=${V}`)))
 const { schemeFor, SCHEMES } = schemes
 const { createMenuBar, createContextMenu } = menusMod
@@ -44,6 +44,7 @@ const state = {
   idClipUrl: null,       // station id -> its spoken-ID clip (roster.js), or null
   linerClipUrl: null,    // (station id, n) -> its nth liner (roster.js), or null
   lastLiner: {},         // station id -> the liner it played last (no repeats)
+  linkedTrack: null,     // the track a shared link named, until it is played (share.js)
   secrets: [],           // SIGNAL's secret stations: off the dial, not off the air
   showLyrics: false,     // the display's mode: Now Playing, or the lyric crawl
   weatherConsent: null,  // 'yes' | 'no' | null (never asked) -- the ONLY weather state saved
@@ -125,6 +126,14 @@ function skipTrack() {
 /** Tuning in to a station: rejoin the broadcast where it would be now if
  *  you were here recently, otherwise join a fresh track part-way through. */
 function tuneIn(station) {
+  // A shared link's song, once, on the station it was shared from: joined
+  // part-way through, the way a radio joins anything (share.js).
+  if (state.linkedTrack && station.tracks.includes(state.linkedTrack)) {
+    const t = state.linkedTrack
+    state.linkedTrack = null
+    play(t, 'join')
+    return
+  }
   const mem = state.memory.get(station.id)
   state.memory.delete(station.id)
   const plan = broadcast.resumePlan(mem, Date.now())
@@ -1451,7 +1460,7 @@ function onKey(e) {
   else if (k === 's' || k === 'S') toggleScan()
   else if (k === 'b' || k === 'B') setBand(state.band === 'ym' ? 'zm' : 'ym')
   else if (k === 'g' || k === 'G') openGuide()
-  else if (k === 'k' || k === 'K') copyLink(state.station)
+  else if (k === 'k' || k === 'K') copyShare()
   else if (k === 'n' || k === 'N') skipTrack()
   else if (k === 'l' || k === 'L') toggleLyrics()
   else if (k === 'w' || k === 'W') openWeather()
@@ -1476,24 +1485,22 @@ function presetMenu(s, x, y, viaKeyboard, button) {
     { label: `&Tune to ${s.callsign}`, shortcut: String(n), action: () => tuneStation(s) },
     { label: 'Station &Info…', shortcut: 'G', action: () => openGuide(s) },
     { separator: true },
-    { label: '&Copy Station Link', shortcut: s === state.station ? 'K' : '', action: () => copyLink(s) },
+    { label: '&Copy Station Link', action: () => copyLink(s) },
   ], x, y, { label: `Preset ${n}: ${s.callsign}`, viaKeyboard })
 }
 
-/** A link that lands on `s`: this page with ?station=<id>, the same
- *  parameter SIGNAL reads, so a link to one radio's station opens the
- *  other's on the same station by swapping the path. */
-function stationLink(s) {
-  const u = new URL(location.href)
-  u.search = `?station=${encodeURIComponent(s.id)}`
-  u.hash = ''
-  return u.href
+/** K: what is playing, as SIGNAL's TAG shares it -- "CALLSIGN on SIGNAL-95
+ *  — Title by Artist", then the link (share.js has the rules). Off, or
+ *  still cueing, it shares the station alone. */
+function copyShare() {
+  const s = state.station
+  copyLink(s, s && state.power ? state.track : null)
 }
 
-async function copyLink(s) {
-  if (!s) { flash('Tune to a station to copy its link'); return }
+async function copyLink(s, track = null) {
+  if (!s) { flash('Tune to a station to share it'); return }
   if (s.secret) { flash('No link for this one — it isn’t on the dial'); return }
-  const link = stationLink(s)
+  const link = share.shareText(location.href, s, track)
   let ok = false
   try {
     await navigator.clipboard.writeText(link)
@@ -1511,7 +1518,7 @@ async function copyLink(s) {
     try { ok = document.execCommand('copy') } catch (e2) {}
     ta.remove()
   }
-  const msg = ok ? `Link to ${s.callsign} copied` : "Couldn't copy the link"
+  const msg = !ok ? "Couldn't copy the link" : track ? `Copied: ${track.title} on ${s.callsign}` : `Link to ${s.callsign} copied`
   flash(msg)
   announce(msg, 'copy')
 }
@@ -1544,7 +1551,7 @@ function menus() {
           action: () => setSleep(m),
         })),
         { separator: true },
-        { label: '&Copy Station Link', shortcut: 'K', disabled: !state.station, action: () => copyLink(state.station) },
+        { label: '&Share What’s Playing', shortcut: 'K', disabled: !state.station, action: copyShare },
       ],
     },
     {
@@ -1665,13 +1672,15 @@ export async function start() {
 
   const first = dial.stationsOn(state.stations, state.band)
   const pick = first[Math.floor(Math.random() * first.length)]
-  // ?station=<id> -- a link someone copied -- wins over where you left the
-  // dial. An id this roster does not have (renamed, or a secret station)
-  // is ignored rather than refused: the set still boots, just where it
-  // would have anyway.
-  const linked = state.stations.find((s) => s.id === new URLSearchParams(location.search).get('station'))
+  // ?station=<id>&track=<youtubeId> -- a link someone shared -- wins over
+  // where you left the dial, and the track plays at the next power-on if it
+  // is still on that station (share.js). An id this roster does not have
+  // (renamed, or a secret station) is ignored rather than refused: the set
+  // still boots, just where it would have anyway.
+  const { station: linked, track: linkedTrack } = share.readShareLink(location.search, state.stations)
   if (linked) {
     state.band = linked.band
+    state.linkedTrack = linkedTrack
     tune(linked.freq)
   } else {
     tune(saved?.freq ?? pick?.freq ?? dial.bandFor(state.band).freqMin)

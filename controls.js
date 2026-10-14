@@ -21,7 +21,7 @@ export const CONTROLS = [
   { mouse: 'Speaker button', keys: ['M'], does: 'Mute' },
   { mouse: 'Station → Sleep timer', keys: ['T'], does: 'Sleep in 60, 30, 15 minutes, or off; fades out, then switches off' },
   { mouse: 'Right-click a preset', keys: ['Shift+F10'], does: 'Preset menu: tune, station info, copy link' },
-  { mouse: 'Station → Copy Station Link', keys: ['K'], does: 'Copy a link to the station you are on' },
+  { mouse: 'Station → Share What’s Playing', keys: ['K'], does: 'Copy the song, the station and a link that plays it' },
   { mouse: 'View → Lyrics', keys: ['L'], does: 'Show the words on the display, in time' },
   { mouse: 'View → Weather', keys: ['W'], does: 'The local forecast (asks first)' },
   { mouse: 'View → Screensaver', keys: ['V'], does: 'Screensaver now (any key or mouse movement returns)' },
