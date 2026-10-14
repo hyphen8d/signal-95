@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <!-- The build this markup belongs to. tools/stamp.js writes it beside
      build.json; main.js reloads once if they disagree (a stale cached page). -->
-<meta name="signal95-build" content="2026-10-14.1">
+<meta name="signal95-build" content="2026-10-14.2">
 <title>SIGNAL-95</title>
 <meta name="description" content="SIGNAL-95: an internet-radio tuner in the style of a mid-90s desktop app. Sixteen curated stations across two bands.">
 <!-- The share card. og.jpg is DERIVED from screenshots/hero.png by
@@ -54,7 +54,8 @@
 </script>
 </head>
 <body>
-<main>
+<div class="frame" id="frame">
+<main id="main">
 <section class="window raised" id="tuner" aria-labelledby="title">
   <header class="titlebar">
     <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 14h10V7H3z"/><path d="M5 7l6-5"/><circle cx="6" cy="10.5" r="1.5"/><path d="M9.5 9.5h2M9.5 11.5h2"/></svg>
@@ -103,6 +104,12 @@
 
   <div class="lower">
     <div class="led sunken" id="led">
+      <!-- While the set is off, the whole display is the way in: a real
+           button, so a keyboard and a screen reader find it too. -->
+      <button class="ledpower" id="ledPower" hidden>
+        <span class="big"><svg width="26" height="26" viewBox="0 0 10 10" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M3 2.2a4 4 0 1 0 4 0"/><path d="M5 0.5v4"/></svg>Power on</span>
+        <span class="hint" id="ledPowerHint"></span>
+      </button>
       <div class="line1 glow"><span id="ledFreq"></span><span id="ledTime"></span></div>
       <div class="title" id="ledTitle"></div>
       <div class="artist glow" id="ledArtist"></div>
@@ -125,6 +132,7 @@
   </footer>
 </section>
 </main>
+</div>
 
 <div class="scrim" id="lost" hidden>
   <section class="dialog alert raised" role="alertdialog" aria-modal="true" aria-labelledby="lostTitle" aria-describedby="lostBody">

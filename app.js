@@ -891,6 +891,50 @@ function toggleMute() {
   render()
 }
 
+// ---------------------------------------------------------------- fitting the screen
+// On a big screen the window is scaled up, in steps, as far as the desk
+// allows -- at 1440x900 the 720px window was a postage stamp with two
+// thirds of the screen empty. Steps, not a free fit, so the pixel font
+// lands on sizes it was drawn for; a transform (see styles.css) so hit
+// testing stays right; never below 1, and phones keep the fluid layout.
+// Dialogs follow the same scale, clamped to fit.
+const UI_STEPS = [2, 1.75, 1.5, 1.25, 1]
+let uiScale = 1
+
+function fitWindow() {
+  const frame = $('frame')
+  const main = $('main')
+  // Phones and upright tablets keep the fluid, full-height layout
+  // (styles.css); only a landscape desk gets the scaled window.
+  if (innerWidth <= 760 || (innerWidth <= 1100 && innerHeight > innerWidth)) {
+    uiScale = 1
+    main.style.transform = ''
+    main.style.width = ''
+    frame.style.width = ''
+    frame.style.height = ''
+    frame.style.maxWidth = ''
+    return
+  }
+  main.style.width = '720px'
+  const w = main.offsetWidth
+  const h = main.offsetHeight
+  uiScale = UI_STEPS.find((k) => w * k <= innerWidth - 64 && h * k <= innerHeight - 64) ?? 1
+  main.style.transform = uiScale === 1 ? '' : `scale(${uiScale})`
+  frame.style.maxWidth = 'none'
+  frame.style.width = `${w * uiScale}px`
+  frame.style.height = `${h * uiScale}px`
+}
+
+/** An open dialog at the window's scale, or the biggest step that fits. */
+function fitDialog(el) {
+  const d = el?.querySelector('.dialog')
+  if (!d) return
+  d.style.transform = ''
+  if (uiScale === 1) return
+  const k = UI_STEPS.find((s) => s <= uiScale && d.offsetWidth * s <= innerWidth - 32 && d.offsetHeight * s <= innerHeight - 32) ?? 1
+  d.style.transform = k === 1 ? '' : `scale(${k})`
+}
+
 // ---------------------------------------------------------------- volume
 // The listener's volume reaches two places: the YouTube player (the music)
 // and our master bus (static, handshake). Both go through here and nowhere
@@ -985,6 +1029,7 @@ function openModal(id, onEscape) {
   ctxMenu?.close()
   const el = $(id)
   el.hidden = false
+  fitDialog(el)
   modal = { el, onEscape, returnTo: document.activeElement }
   ;(el.querySelector('.def') ?? focusables(el)[0])?.focus()
 }
@@ -1294,6 +1339,9 @@ function render() {
 
   $('title').textContent = s ? `SIGNAL-95 — ${s.callsign}` : 'SIGNAL-95'
   $('power').setAttribute('aria-pressed', String(state.power))
+  const lp = $('ledPower')
+  if (lp.hidden !== state.power) lp.hidden = state.power
+  $('ledPowerHint').textContent = COARSE ? 'Tap here to tune in' : 'Click here, or press P'
   $('mute').setAttribute('aria-pressed', String(state.muted))
   drawVolume()
   $('scan').setAttribute('aria-pressed', String(!!state.scanTimer))
@@ -1308,6 +1356,7 @@ function render() {
   const freqLine = `${state.freq.toFixed(1)} ${band.label}`
   if (!state.power) {
     // A phone has no P key: say what a thumb can do instead.
+    // (Covered by #ledPower, the display-sized way in, while off.)
     setLed(`${freqLine}`, '', 'Power is off', COARSE ? 'Tap the power button, top right' : 'Press P, or the button in the corner', '')
   } else if (s && lyricRows()) {
     const [cur, next] = lyricRows()
@@ -1367,6 +1416,7 @@ const clock = (sec) => `${String(Math.floor(sec / 60)).padStart(2, '0')}:${Strin
 
 function wireMouse() {
   $('power').addEventListener('click', togglePower)
+  $('ledPower').addEventListener('click', () => { togglePower(); $('power').focus({ preventScroll: true }) })
   $('mute').addEventListener('click', toggleMute)
   $('scan').addEventListener('click', toggleScan)
   $('seekUp').addEventListener('click', () => seek(1))
@@ -1648,6 +1698,12 @@ export async function start() {
   // Idle start defaults on -- the era's behaviour -- except for anyone
   // whose system asks for reduced motion, who has to ask for it.
   if (state.saverIdle === null) state.saverIdle = !reducedMotion
+  // The window's size on the desk: now, whenever the viewport changes, and
+  // whenever the window's own content does (lyrics that wrap, a
+  // weather readout in the status bar).
+  fitWindow()
+  addEventListener('resize', () => { fitWindow(); if (modal) fitDialog(modal.el) })
+  new ResizeObserver(() => fitWindow()).observe($('main'))
   // The game's keys, first of all (capture, ahead of the screensaver and the
   // radio): while it is open it owns the keyboard.
   window.addEventListener('keydown', (e) => { if (gameKey(e, true)) lastInputAt = Date.now() }, true)

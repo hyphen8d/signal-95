@@ -45,9 +45,12 @@ body {
   font-variant-ligatures: none;
   display: flex;
   justify-content: center;
-  align-items: flex-start;
+  /* Centred on the desk, both ways (2026-10-13): pinned to the top, the
+     window read as a web page with a lot of nothing under it. */
+  align-items: center;
   min-height: 100vh;
-  padding: 40px 16px;
+  min-height: 100dvh;
+  padding: 32px 16px;
 }
 
 .sr-only {
@@ -72,7 +75,13 @@ body {
 
 /* ---- the window ---- */
 
-main { width: 100%; max-width: 720px; }
+/* The frame holds the window's place on the desk; app.js (fitWindow)
+   scales the window up in steps on a big screen and sizes the frame to
+   match. A transform, not `zoom`: every hit test here (the dial, the
+   volume slider) measures getBoundingClientRect against clientX, and a
+   transform keeps those two in the same space in every browser. */
+.frame { width: 100%; max-width: 720px; }
+main { width: 100%; max-width: 720px; transform-origin: top left; }
 
 .window { width: 100%; max-width: 720px; padding: 4px; display: flex; flex-direction: column; gap: 3px; }
 
@@ -148,6 +157,7 @@ main { width: 100%; max-width: 720px; }
 .lower { display: flex; gap: 10px; padding: 4px 6px; }
 
 .led {
+  position: relative;
   flex: 1; min-height: 132px; background: var(--tube); padding: 10px 14px;
   font-family: 'VT323', monospace; color: var(--led);
   display: flex; flex-direction: column; gap: 2px;
@@ -162,6 +172,27 @@ main { width: 100%; max-width: 720px; }
    rather than truncate -- a cut-off lyric is worse than a taller panel. */
 .led.lyrics .title { font-size: 24px; }
 .led.lyrics .artist { opacity: 0.55; text-shadow: none; }
+
+/* The way in while the set is off: the whole display, as a button. The
+   first version left a 22px icon in the title bar's corner as the only way
+   in, with a hint in dim green on black that was hard to read. */
+.ledpower {
+  /* z-index: the display's rows are translucent (.glow), and opacity puts
+     them in a later paint layer than an earlier positioned sibling -- the
+     first version had "Press P..." showing through this panel. */
+  position: absolute; inset: 0; z-index: 2; border: 0; background: var(--tube); cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  font-family: 'VT323', monospace; color: var(--led);
+}
+.ledpower[hidden] { display: none; }
+.ledpower .big { display: flex; align-items: center; gap: 10px; font-size: 42px; text-shadow: 0 0 10px var(--led); }
+.ledpower .hint { font-size: 20px; color: var(--chalk); }
+.ledpower:hover .big, .ledpower:focus-visible .big { color: var(--chalk); }
+.ledpower:focus-visible { outline: 1px dotted var(--chalk); outline-offset: -6px; }
+@media (prefers-reduced-motion: no-preference) {
+  .ledpower .big { animation: ledpulse 2.4s ease-in-out infinite; }
+  @keyframes ledpulse { 50% { text-shadow: 0 0 2px var(--led); } }
+}
 
 .meters { width: 128px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
 .bars { display: flex; align-items: flex-end; gap: 3px; height: 44px; }
@@ -278,6 +309,17 @@ kbd { display: inline-block; font: inherit; font-variant-ligatures: none; font-s
 
 #ytDock { position: fixed; left: -9999px; top: 0; width: 260px; height: 200px; }
 
+/* A finger, not a pointer (an iPad, upright or not): toolbar buttons and
+   tabs at a size a thumb can hit. Before the phone block below, which
+   lays the presets out its own way and wins where both apply. */
+@media (pointer: coarse) {
+  .toolbar .btn { min-height: 38px; }
+  .toolbar .icon { width: 44px; }
+  .toolbar .preset { width: 40px; }
+  .tab { padding-top: 8px; padding-bottom: 8px; }
+  .menutitle { padding: 8px 12px; }
+}
+
 /* The toolbar on a phone (2026-10-13, reported: "the presets wrap/look
    odd"). Left to flex-wrap, it broke wherever the space ran out: the
    separator dangling at the end of row one, the presets on row two, and
@@ -295,6 +337,36 @@ kbd { display: inline-block; font: inherit; font-variant-ligatures: none; font-s
   .toolbar .volume { width: 84px; }
 }
 
+/* A phone, or a tablet held upright: the window takes the screen's width
+   and height, and the display -- the thing worth looking at -- takes what
+   is spare. Both used to float a window with half the screen empty under
+   it (2026-10-13); an upright iPad was a 720px window in 1180px of desk. */
+@media (max-width: 560px), (max-width: 1100px) and (orientation: portrait) {
+  body { align-items: stretch; }
+  .frame { display: flex; flex-direction: column; min-height: calc(100dvh - 2 * var(--gutter, 32px)); max-width: 900px; }
+  main, .window { flex: 1; display: flex; flex-direction: column; max-width: none; }
+  .lower { flex: 1; flex-direction: column; }
+  .led { min-height: 190px; }
+  .led .title { font-size: 30px; }
+  .meters { width: auto; flex-direction: row; align-items: center; flex-wrap: wrap; }
+  .meters .buffer { flex: 1; min-width: 90px; }
+}
+/* An upright tablet's display is big enough to read across a room, so its
+   text grows to match; the meters sit under it, as on a phone, rather than
+   stretching into a tall thin column beside it. */
+@media (min-width: 561px) and (max-width: 1100px) and (orientation: portrait) {
+  .led { padding: 18px 24px; }
+  .led .line1 { font-size: 28px; }
+  .led .title { font-size: 44px; }
+  .led .artist { font-size: 30px; }
+  .led .tagline { font-size: 26px; }
+  .ledpower .big { font-size: 64px; }
+  .ledpower .hint { font-size: 28px; }
+}
+@media (max-width: 560px) {
+  :root { --gutter: 12px; }
+}
+
 @media (max-width: 560px) {
   .guidebody { flex-direction: column; height: 70vh; }
   .stationlist { width: auto; height: 34%; }
@@ -303,9 +375,6 @@ kbd { display: inline-block; font: inherit; font-variant-ligatures: none; font-s
   .menutitle { padding: 8px 9px; }
   .keys td:nth-child(3), .keys th:nth-child(3) { display: none; }
   .wxparts { grid-template-columns: 1fr; }
-  body { padding: 16px; }
-  .lower { flex-direction: column; }
-  .meters { width: auto; flex-direction: row; align-items: center; flex-wrap: wrap; }
-  .meters .buffer { flex: 1; min-width: 90px; }
+  body { padding: 12px; }
   #stSn { display: none; }
 }

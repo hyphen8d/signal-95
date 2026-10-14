@@ -621,6 +621,40 @@ and deleting the dot rule were both checked to turn the suite red.
   come from the same 16px source; "any", not "maskable" -- a circular crop
   at that size clips the radio's corners.
 
+## Fitting the screen, and the way in (2026-10-14)
+
+A design pass found three things wrong with the whole, in order of
+impact, and fixed them together:
+
+- **The way in.** Off, the only way to start was a 22px icon in the title
+  bar's corner, with a hint in dim green on black. Now the whole display
+  is a real `<button id="ledPower">` while the set is off -- "Power on",
+  and "Click here, or press P" / "Tap here to tune in". It has `z-index`
+  because the display's rows are translucent (`.glow`), which put them in
+  a later paint layer: the first version had them showing through it.
+- **A big desk.** At 1440x900 the 720px window sat at the top with two
+  thirds of the screen empty. `fitWindow()` now scales it in steps (1,
+  1.25, 1.5, 1.75, 2 -- steps so the pixel font lands on sizes it was
+  drawn for), centred, with `#frame` holding its place. **A transform, not
+  `zoom`:** every hit test here measures getBoundingClientRect against
+  clientX, and only a transform keeps those in the same space in every
+  browser -- the drive clicks the dial at 25% through the scaled window
+  and checks it tunes 25% along the band. Dialogs follow the scale,
+  clamped to fit (`fitDialog`).
+- **Phones and upright tablets** take the full screen height, the display
+  taking the spare room; an upright tablet's display text grows and the
+  meters sit under it. `pointer: coarse` gets thumb-sized toolbar
+  buttons and tabs.
+
+Measured: 1.75x on 1440x900, 1.5x on a 1280x720 laptop and an iPad held
+sideways; upright iPad and phones fill the screen. The drive has a
+scenario for each, mutation-checked (the bleed-through probe first
+checked the display's centre, where no row is, and passed with the bug
+in -- it probes the rows now).
+
+When stopping a dev server from a script, kill it by PID: `pkill -f` with
+its command line also matches the shell running the pkill, and kills it.
+
 ## On a phone (2026-10-13)
 
 Under 600px the toolbar is two deliberate rows, not a flex-wrap: transport

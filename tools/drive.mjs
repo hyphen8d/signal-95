@@ -265,12 +265,52 @@ scenario('K shares the song, and the link plays it', async (p, base) => {
   return line
 })
 
+scenario('first visit: tapping the display powers on', async (p, base) => {
+  await p.goto(base)
+  check(await p.ev(`document.getElementById('ledPower').hidden === false`), 'no power-on panel while off')
+  // Probe the display's ROWS, not its middle: the translucent rows are what
+  // showed through the panel in the first version, and the middle of the
+  // display has no row in it (a centre-only probe passed with the bug in).
+  const hidden = await p.ev(`(() => { for (const id of ['ledFreq', 'ledTitle', 'ledArtist', 'ledTagline']) { const r = document.getElementById(id).getBoundingClientRect(); if (!r.width) continue; const el = document.elementFromPoint(r.x + 4, r.y + r.height / 2); if (!el.closest('#ledPower')) return 'shows through the power panel: #' + (el.id || el.parentElement.id) } return 'covered' })()`)
+  check(hidden === 'covered', hidden)
+  const [x, y] = await p.at('#led')
+  await p.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] })
+  await p.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+  await sleep(500)
+  check((await p.ev(`document.getElementById('power').getAttribute('aria-pressed')`)) === 'true', 'a tap on the display did not power on')
+  check(await p.ev(`document.getElementById('ledPower').hidden`), 'the panel stayed up once on')
+}, { width: 390, height: 844, mobile: true, touch: true })
+
+scenario('a big desk: the window scales up, centred, and the dial still hits', async (p, base) => {
+  await p.goto(base)
+  const r = await p.ev(`(() => { const r = document.getElementById('tuner').getBoundingClientRect(); return { x: r.x, right: innerWidth - r.right, y: r.y, bottom: innerHeight - r.bottom, w: r.width } })()`)
+  check(r.w >= 1080, `not scaled up on a 1440x900 desk (window ${Math.round(r.w)}px wide)`)
+  check(Math.abs(r.x - r.right) < 3 && Math.abs(r.y - r.bottom) < 3, `not centred: ${JSON.stringify(r)}`)
+  // Through the transform, a click a quarter of the way along the dial
+  // still lands a quarter of the way along the band.
+  const d = await p.ev(`(() => { const r = document.getElementById('dial').getBoundingClientRect(); return [r.x, r.y, r.width, r.height] })()`)
+  await p.click(d[0] + d[2] * 0.25, d[1] + d[3] / 2)
+  const f = Number((await p.text('ledFreq')).split(' ')[0])
+  const band = (await p.ev(`document.querySelector('.tab[aria-selected=true]').dataset.band`)) === 'ym' ? [100, 900] : [1000, 1800]
+  const want = band[0] + 0.25 * (band[1] - band[0])
+  check(Math.abs(f - want) < 6, `a click at 25% tuned ${f}, expected about ${want}`)
+  return `window ${Math.round(r.w)}px, click -> ${f}`
+}, { width: 1440, height: 900 })
+
+scenario('an upright tablet: the window fills the screen', async (p, base) => {
+  await p.goto(base)
+  const r = await p.ev(`(() => { const r = document.getElementById('tuner').getBoundingClientRect(); return { w: r.width, h: r.height, iw: innerWidth, ih: innerHeight } })()`)
+  check(r.h > r.ih * 0.9 && r.w > r.iw * 0.9, `does not fill an upright tablet: ${JSON.stringify(r)}`)
+  check(await p.ev(`document.querySelector('.meters').getBoundingClientRect().top > document.getElementById('led').getBoundingClientRect().bottom - 2`), 'the meters are not under the display')
+}, { width: 820, height: 1180, touch: true })
+
 scenario('phone toolbar: two rows, nothing stranded', async (p, base) => {
   await p.goto(base)
   const rows = await p.ev(`(() => { const top = (s) => Math.round(document.querySelector(s).getBoundingClientRect().top); return { seek: top('#seekDown'), vol: top('#volume'), mute: top('#mute'), presets: top('#presets') } })()`)
   check(Math.abs(rows.seek - rows.mute) < 8 && Math.abs(rows.seek - rows.vol) < 8, `sound stranded off the first row: ${JSON.stringify(rows)}`)
   check(rows.presets > rows.seek, `presets not on their own row: ${JSON.stringify(rows)}`)
   check(await p.ev(`document.querySelector('#presets').getBoundingClientRect().width > document.querySelector('.toolbar').getBoundingClientRect().width * 0.85`), 'presets do not span the width')
+  check(await p.ev(`document.getElementById('tuner').getBoundingClientRect().bottom > innerHeight - 30`), 'the window does not reach the bottom of a phone screen')
 }, { width: 390, height: 760, mobile: true, touch: true })
 
 // ---------------------------------------------------------------- run
